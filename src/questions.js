@@ -1,0 +1,408 @@
+// Hell Is a Game Show: the question library. The host builds a board from these
+// (or writes their own). Answers are for the host's eyes; contestants answer out
+// loud and the host rules. Within a category, questions go from 1 point (easy)
+// to 5 points (hard). Fraud statements have something false in them.
+(function (root) {
+  'use strict';
+  const q = (q, a, fraud) => ({ q, a, fraud: !!fraud });
+  const cat = (name, cells) => ({ name, cells });
+
+  const CATS = [
+    cat('Movies', [
+      q('In The Wizard of Oz film, what colour are Dorothy\'s slippers?', 'Ruby red. (They\'re silver in the book. Don\'t accept silver.)'),
+      q('Which actor played Jack in Titanic?', 'Leonardo DiCaprio'),
+      q('Jurassic Park came out in 1993, was directed by Steven Spielberg, and was based on a novel by Stephen King.', 'The novel was by Michael Crichton, not Stephen King.', true),
+      q('Which film won the very first Oscar for Best Animated Feature?', 'Shrek (at the 2002 ceremony)'),
+      q('What was the first feature-length film made entirely with computer animation?', 'Toy Story (1995)'),
+    ]),
+    cat('Video Games', [
+      q('In the original Super Mario Bros., who is Mario trying to save?', 'Princess Peach. (Princess Toadstool is also right. Just "the princess"? Your call, host.)'),
+      q('In The Legend of Zelda, what is the princess called?', 'Zelda. (Not Link. Link is the guy.)'),
+      q('Which company created Sonic the Hedgehog?', 'Sega'),
+      q('Minecraft was created by Markus "Notch" Persson, first released in 2009, and later bought by Sony for $2.5 billion.', 'Microsoft bought it, not Sony.', true),
+      q('What is the best-selling video game console of all time?', 'PlayStation 2 (about 160 million). The Nintendo DS is a close second.'),
+    ]),
+    cat('Music', [
+      q('Which band sang "Bohemian Rhapsody"?', 'Queen'),
+      q('The Beatles came from Liverpool, and their members were John, Paul, George and Pete Townshend.', 'The fourth Beatle was Ringo Starr. Pete Townshend was in The Who.', true),
+      q('Which Australian band released the album "Highway to Hell"?', 'AC/DC'),
+      q('Which singer\'s real name is Stefani Germanotta?', 'Lady Gaga'),
+      q('What was the very first music video played on MTV?', '"Video Killed the Radio Star" by The Buggles'),
+    ]),
+    cat('Hell & Myth', [
+      q('In Greek myth, who is the god of the underworld?', 'Hades'),
+      q('What is the three-headed dog that guards the Greek underworld?', 'Cerberus'),
+      q('How many circles of Hell are there in Dante\'s Inferno?', 'Nine'),
+      q('In Greek myth, who ferries the dead across the river to the underworld?', 'Charon'),
+      q('In Dante\'s Inferno, who is trapped in ice at the very centre of Hell?', 'Satan (Lucifer, or Dis)'),
+    ]),
+    cat('Name a...', [
+      q('Name a movie with a dog in it.', 'Anything reasonable. Beethoven, Marley & Me, Turner & Hooch, The Wizard of Oz...'),
+      q('Name a country that starts with Z.', 'Zambia or Zimbabwe'),
+      q('Name a movie that came out in 1999.', 'The Matrix, Fight Club, The Sixth Sense, Toy Story 2, American Beauty, Star Wars: Episode I, Notting Hill, The Blair Witch Project, The Mummy...'),
+      q('Name a planet that has rings.', 'Saturn, Jupiter, Uranus or Neptune (all four giants have rings)'),
+      q('Name a film that won Best Picture at an Oscars ceremony in the 1990s.', 'Driving Miss Daisy, Dances with Wolves, The Silence of the Lambs, Unforgiven, Schindler\'s List, Forrest Gump, Braveheart, The English Patient, Titanic, Shakespeare in Love'),
+    ]),
+    cat('Horror Movies', [
+      q('Which film has a masked killer stalking the town of Haddonfield on Halloween night?', 'Halloween (Michael Myers)'),
+      q('What is the name of the killer doll in Child\'s Play?', 'Chucky (Charles Lee Ray)'),
+      q('In the film of The Shining, what number is the room Danny is told to stay out of?', 'Room 237. (It\'s 217 in the book.)'),
+      q('A Nightmare on Elm Street (1984), directed by John Carpenter, has Freddy Krueger attacking teenagers in their dreams.', 'It was directed by Wes Craven, not John Carpenter.', true),
+      q('Which 1922 German silent film was an unofficial adaptation of Dracula?', 'Nosferatu'),
+    ]),
+    cat('Sci-Fi', [
+      q('What is the name of Han Solo\'s ship?', 'The Millennium Falcon'),
+      q('In The Matrix, which colour pill does Neo take?', 'The red pill'),
+      q('What does the T stand for in Captain James T. Kirk?', 'Tiberius'),
+      q('In Back to the Future, how much power does the time machine need?', '1.21 gigawatts ("jigawatts")'),
+      q('Which 1982 film features replicants and the Voight-Kampff test?', 'Blade Runner'),
+    ]),
+    cat('80s & 90s Movies', [
+      q('Which film\'s theme song asks "Who you gonna call?"', 'Ghostbusters'),
+      q('In Home Alone, which city does Kevin\'s family fly to without him?', 'Paris'),
+      q('Which 1994 film has a conversation about a "Royale with cheese"?', 'Pulp Fiction'),
+      q('In Die Hard, John McClane fights terrorists at Nakatomi Plaza during a Fourth of July party.', 'It\'s a Christmas Eve party, not the Fourth of July.', true),
+      q('Which actor played the liquid-metal T-1000 in Terminator 2?', 'Robert Patrick'),
+    ]),
+    cat('Cartoons', [
+      q('What kind of dog is Scooby-Doo?', 'A Great Dane'),
+      q('In Toy Story, what is the toy dinosaur called?', 'Rex'),
+      q('In The Simpsons, what is the name of the bar Homer drinks at?', 'Moe\'s Tavern'),
+      q('What was Disney\'s first full-length animated feature film?', 'Snow White and the Seven Dwarfs (1937)'),
+      q('In SpongeBob SquarePants, what is Mr. Krabs\' first name?', 'Eugene'),
+    ]),
+    cat('Retro Games', [
+      q('What colour is Pac-Man?', 'Yellow'),
+      q('In Tetris, how many squares make up each piece?', 'Four'),
+      q('Which arcade game had Mario (then called Jumpman) rescuing a woman from a giant ape?', 'Donkey Kong (1981)'),
+      q('The original Doom is set on the moons of which planet?', 'Mars (Phobos and Deimos)'),
+      q('What was Sega\'s last home console, launched in Japan in 1998?', 'The Dreamcast'),
+    ]),
+    cat('Modern Games', [
+      q('In Fortnite, what vehicle do players jump out of at the start of a match?', 'The Battle Bus'),
+      q('What is the name of the armoured hero of the Halo series?', 'Master Chief (John-117)'),
+      q('Which game series is set in the fictional city of Los Santos?', 'Grand Theft Auto (GTA V and San Andreas)'),
+      q('In what year did the original Nintendo Switch come out?', '2017'),
+      q('Which Polish studio made The Witcher 3 and Cyberpunk 2077?', 'CD Projekt Red'),
+    ]),
+    cat('Rock Music', [
+      q('Who is known as the King of Rock and Roll?', 'Elvis Presley'),
+      q('Which band walks across a zebra crossing on the cover of "Abbey Road"?', 'The Beatles'),
+      q('Who was the lead singer of Nirvana?', 'Kurt Cobain'),
+      q('Led Zeppelin\'s "Stairway to Heaven" came out on their fourth album in 1971, sung by frontman Mick Jagger.', 'Their singer was Robert Plant. Mick Jagger is in the Rolling Stones.', true),
+      q('Which member of Queen wrote "We Will Rock You"?', 'Brian May'),
+    ]),
+    cat('Pop Music', [
+      q('Which singer is known as the Queen of Pop?', 'Madonna'),
+      q('Which singer released the album "25", featuring the song "Hello"?', 'Adele'),
+      q('Which boy band sang "I Want It That Way"?', 'Backstreet Boys'),
+      q('What was the name of the Spice Girls\' 1997 movie?', 'Spice World'),
+      q('Who had the 2019 hit "Old Town Road"?', 'Lil Nas X (the remix features Billy Ray Cyrus)'),
+    ]),
+    cat('TV', [
+      q('In Doctor Who, what colour is the TARDIS?', 'Blue'),
+      q('In Breaking Bad, what alias does Walter White use?', 'Heisenberg'),
+      q('Which show is set in the fictional town of Hawkins, Indiana?', 'Stranger Things'),
+      q('In the US version of The Office, which paper company do they work for?', 'Dunder Mifflin'),
+      q('In Seinfeld, what is Kramer\'s first name?', 'Cosmo'),
+    ]),
+    cat('Food & Drink', [
+      q('What is the main ingredient in hummus?', 'Chickpeas'),
+      q('Which nut is used to make marzipan?', 'Almonds'),
+      q('What kind of pastry are profiteroles made from?', 'Choux pastry'),
+      q('Vegemite was invented in England in 1922 and is made from leftover brewer\'s yeast.', 'It was invented in Melbourne, Australia, not England.', true),
+      q('Which country does Manchego cheese come from?', 'Spain'),
+    ]),
+    cat('Science', [
+      q('Which planet is closest to the Sun?', 'Mercury'),
+      q('Which gas do plants take in from the air to make food?', 'Carbon dioxide'),
+      q('What is the chemical symbol for sodium?', 'Na'),
+      q('How many bones are in the adult human body?', '206'),
+      q('Which volcanic rock is light enough to float on water?', 'Pumice'),
+    ]),
+    cat('Geography', [
+      q('What is the capital of Japan?', 'Tokyo'),
+      q('What is the longest river in Africa?', 'The Nile'),
+      q('What is the capital of Canada?', 'Ottawa'),
+      q('In which country is the city of Timbuktu?', 'Mali'),
+      q('What is the capital of Kazakhstan?', 'Astana'),
+    ]),
+    cat('Straya', [
+      q('What is the capital of Australia?', 'Canberra'),
+      q('Which Australian animal lays eggs and has a bill like a duck?', 'The platypus (the echidna lays eggs too, but no duck bill)'),
+      q('What is the Aboriginal name of the giant rock once called Ayers Rock?', 'Uluru'),
+      q('The Sydney Opera House opened in 1973 and was designed by Australian architect Jørn Utzon.', 'Utzon was Danish, not Australian.', true),
+      q('In what year did Australia\'s colonies federate into one nation?', '1901'),
+    ]),
+    cat('History', [
+      q('Who was the first President of the United States?', 'George Washington'),
+      q('In what year did World War II end?', '1945'),
+      q('Which civilisation built Machu Picchu?', 'The Inca'),
+      q('What was the name of the ship that carried the Pilgrims to America in 1620?', 'The Mayflower'),
+      q('Who became the first emperor of a unified China in 221 BC?', 'Qin Shi Huang'),
+    ]),
+    cat('Demons & the Occult', [
+      q('What three-pronged tool is the Devil usually drawn holding?', 'A pitchfork (or trident)'),
+      q('What fruit is the forbidden fruit usually shown as, even though the Bible never says?', 'An apple'),
+      q('Which 1973 horror film features the demon Pazuzu?', 'The Exorcist'),
+      q('Who wrote "Paradise Lost", where Satan says it\'s "better to reign in Hell than serve in Heaven"?', 'John Milton'),
+      q('Which demon\'s name is often translated as "Lord of the Flies"?', 'Beelzebub'),
+    ]),
+    cat('Sport', [
+      q('How many players does a soccer team have on the field?', '11'),
+      q('In which sport would you do a slam dunk?', 'Basketball'),
+      q('Which country hosted, and won, the first FIFA World Cup in 1930?', 'Uruguay'),
+      q('In tennis, what is a score of zero called?', 'Love'),
+      q('Which AFL club is nicknamed the Magpies?', 'Collingwood'),
+    ]),
+    cat('The Internet', [
+      q('What does LOL stand for?', 'Laughing out loud'),
+      q('Getting "Rickrolled" means being tricked into hearing which song?', '"Never Gonna Give You Up" by Rick Astley'),
+      q('Which website\'s mascot is an alien called Snoo?', 'Reddit'),
+      q('What breed of dog is the "Doge" meme?', 'A Shiba Inu'),
+      q('In what year was YouTube founded?', '2005'),
+    ]),
+    cat('Name another...', [
+      q('Name a colour of the rainbow.', 'Red, orange, yellow, green, blue, indigo, violet'),
+      q('Name a Beatle.', 'John, Paul, George or Ringo. (Pete Best or Stuart Sutcliffe? Your call, host.)'),
+      q('Name a Quentin Tarantino film.', 'Reservoir Dogs, Pulp Fiction, Jackie Brown, Kill Bill, Death Proof, Inglourious Basterds, Django Unchained, The Hateful Eight, Once Upon a Time in Hollywood'),
+      q('Name a country that borders Germany.', 'Denmark, Poland, Czechia, Austria, Switzerland, France, Luxembourg, Belgium, the Netherlands'),
+      q('Name a chemical element whose symbol is a single letter.', 'H, B, C, N, O, F, P, S, K, V, Y, I, W, U'),
+    ]),
+    cat('Superheroes', [
+      q('What is Superman\'s home planet?', 'Krypton'),
+      q('What is Spider-Man\'s real name in the original comics?', 'Peter Parker'),
+      q('Which metal is bonded to Wolverine\'s skeleton?', 'Adamantium'),
+      q('Wonder Woman is an Amazon princess from Themyscira whose signature weapon is the Hammer of Truth.', 'It\'s the Lasso of Truth, not a hammer.', true),
+      q('What was the first film in the Marvel Cinematic Universe?', 'Iron Man (2008)'),
+    ]),
+    cat('Star Wars', [
+      q('Who is Luke Skywalker\'s father?', 'Darth Vader (Anakin Skywalker)'),
+      q('What colour is Mace Windu\'s lightsaber?', 'Purple'),
+      q('What species is Chewbacca?', 'A Wookiee'),
+      q('What is the name of Boba Fett\'s father?', 'Jango Fett'),
+      q('In A New Hope, what is the number of Princess Leia\'s detention cell?', 'Cell 2187 (detention block AA-23)'),
+    ]),
+    cat('Disney & Pixar', [
+      q('What is the name of the snowman in Frozen?', 'Olaf'),
+      q('In The Lion King, what is Simba\'s father called?', 'Mufasa'),
+      q('In Up, what is the name of the talking dog?', 'Dug'),
+      q('Toy Story came out in 1995, with Tom Hanks voicing Woody and Billy Crystal voicing Buzz Lightyear.', 'Buzz was voiced by Tim Allen. (Billy Crystal turned the role down.)', true),
+      q('In Monsters, Inc., what is Boo\'s real name?', 'Mary'),
+    ]),
+    cat('Sitcoms', [
+      q('In Friends, what is the name of Ross\'s pet monkey?', 'Marcel'),
+      q('In The Big Bang Theory, what is Sheldon\'s surname?', 'Cooper'),
+      q('Which sitcom is set in a Boston bar "where everybody knows your name"?', 'Cheers'),
+      q('In Arrested Development, where is there "always money"?', 'In the banana stand'),
+      q('What is the name of the Spanish waiter in Fawlty Towers?', 'Manuel'),
+    ]),
+    cat('Anime', [
+      q('Which anime follows a young ninja who dreams of becoming Hokage?', 'Naruto'),
+      q('In One Piece, what does Luffy want to become?', 'King of the Pirates'),
+      q('Which studio made My Neighbor Totoro?', 'Studio Ghibli'),
+      q('In Death Note, what is the name of the shinigami who drops the notebook?', 'Ryuk'),
+      q('In Attack on Titan, what is Eren\'s surname?', 'Yeager (Jaeger)'),
+    ]),
+    cat('James Bond', [
+      q('What is James Bond\'s code number?', '007'),
+      q('How does Bond like his martini?', 'Shaken, not stirred'),
+      q('Who was the first actor to play Bond in the official film series?', 'Sean Connery'),
+      q('What letter is the head of MI6, Bond\'s boss, known by?', 'M'),
+      q('Which Bond film features the henchman Oddjob and his deadly hat?', 'Goldfinger'),
+    ]),
+    cat('Harry Potter', [
+      q('What is the name of Harry\'s owl?', 'Hedwig'),
+      q('Which Hogwarts house is Harry sorted into?', 'Gryffindor'),
+      q('What is the Weasley family home called?', 'The Burrow'),
+      q('Harry\'s wand is holly with a dragon heartstring core, and it\'s the "brother" of Voldemort\'s wand.', 'The core is a phoenix feather (from Fawkes), not dragon heartstring.', true),
+      q('Name all three Deathly Hallows.', 'The Elder Wand, the Resurrection Stone and the Cloak of Invisibility'),
+    ]),
+    cat('Lord of the Rings', [
+      q('What kind of creature is Frodo?', 'A hobbit'),
+      q('Which wizard shouts "You shall not pass!"?', 'Gandalf'),
+      q('Where must the One Ring be destroyed?', 'Mount Doom (Orodruin), in Mordor'),
+      q('What is the name of Aragorn\'s reforged sword?', 'Andúril'),
+      q('Who was Sauron\'s master, the original Dark Lord?', 'Morgoth (Melkor)'),
+    ]),
+    cat('Nintendo', [
+      q('What colour is Yoshi usually?', 'Green'),
+      q('In Animal Crossing, which raccoon sells you your house?', 'Tom Nook'),
+      q('What was the NES called in Japan?', 'The Famicom (Family Computer)'),
+      q('Nintendo was founded in Kyoto in 1889, first making playing cards, by its first president, Shigeru Miyamoto.', 'It was founded by Fusajiro Yamauchi. Miyamoto is the game designer, born in 1952.', true),
+      q('What was Nintendo\'s red-and-black 3D console from 1995 that flopped?', 'The Virtual Boy'),
+    ]),
+    cat('Pokémon', [
+      q('What type is Pikachu?', 'Electric'),
+      q('What does Charmander evolve into?', 'Charmeleon'),
+      q('What is Ash\'s surname?', 'Ketchum'),
+      q('Which Pokémon is number 151 in the original Pokédex?', 'Mew'),
+      q('In Pokémon Red and Blue, which spooky town has the Pokémon Tower full of ghosts?', 'Lavender Town'),
+    ]),
+    cat('Board Games', [
+      q('In chess, which piece can only move diagonally?', 'The bishop'),
+      q('How many squares are on a chessboard?', '64'),
+      q('What is the most expensive property on a standard Monopoly board?', 'Boardwalk (Mayfair in the UK and Australia)'),
+      q('In Cluedo, who is the murder victim?', 'Dr Black (Mr Boddy in the US version, Clue)'),
+      q('In English Scrabble, how many points is the Q tile worth?', '10'),
+    ]),
+    cat('Hip Hop', [
+      q('Which rapper\'s real name is Marshall Mathers?', 'Eminem'),
+      q('Which rapper is married to Beyoncé?', 'Jay-Z'),
+      q('Which group released "Straight Outta Compton"?', 'N.W.A'),
+      q('Kendrick Lamar won the 2018 Pulitzer Prize for Music for his album To Pimp a Butterfly.', 'He won it for DAMN., not To Pimp a Butterfly.', true),
+      q('Whose debut album was "Ready to Die" (1994)?', 'The Notorious B.I.G.'),
+    ]),
+    cat('80s Music', [
+      q('Who sang "Like a Virgin"?', 'Madonna'),
+      q('Which band sang "Don\'t Stop Believin\'"?', 'Journey'),
+      q('Which Norwegian band sang "Take On Me"?', 'a-ha'),
+      q('Which Australian band had a 1981 hit with "Down Under"?', 'Men at Work'),
+      q('Which duo released "Sweet Dreams (Are Made of This)"?', 'Eurythmics'),
+    ]),
+    cat('Aussie Music', [
+      q('Which Aussie singer had a hit with "Can\'t Get You Out of My Head"?', 'Kylie Minogue'),
+      q('Which band sang "Beds Are Burning"?', 'Midnight Oil'),
+      q('Which band was fronted by Michael Hutchence?', 'INXS'),
+      q('Which Aussie singer released "Chandelier" in 2014?', 'Sia'),
+      q('Which Perth band, led by Kevin Parker, released "The Less I Know the Better"?', 'Tame Impala'),
+    ]),
+    cat('Space', [
+      q('What is the largest planet in our solar system?', 'Jupiter'),
+      q('What is the name of the galaxy we live in?', 'The Milky Way'),
+      q('Who was the first person in space?', 'Yuri Gagarin (1961)'),
+      q('Neil Armstrong and Buzz Aldrin landed on the Moon in July 1969 aboard Apollo 13.', 'It was Apollo 11. Apollo 13 never landed.', true),
+      q('What is the largest volcano in the solar system, found on Mars?', 'Olympus Mons'),
+    ]),
+    cat('Animals', [
+      q('What is a baby kangaroo called?', 'A joey'),
+      q('What is the largest mammal on Earth?', 'The blue whale'),
+      q('How many hearts does an octopus have?', 'Three'),
+      q('Which bird can fly backwards?', 'The hummingbird'),
+      q('What colour is a polar bear\'s skin?', 'Black (the fur is see-through)'),
+    ]),
+    cat('The Human Body', [
+      q('What is the largest organ of the human body?', 'The skin'),
+      q('What is the common name for the patella?', 'The kneecap'),
+      q('How many teeth does an adult normally have, including wisdom teeth?', '32'),
+      q('Which organ makes insulin?', 'The pancreas'),
+      q('Which part of the eye has no blood vessels and takes oxygen straight from the air?', 'The cornea'),
+    ]),
+    cat('Maths & Numbers', [
+      q('How many sides does a hexagon have?', '6'),
+      q('What is 12 times 12?', '144'),
+      q('What is 50 in Roman numerals?', 'L'),
+      q('What is the square root of 169?', '13'),
+      q('Say pi to five decimal places.', '3.14159'),
+    ]),
+    cat('Inventions', [
+      q('Who is credited with inventing the telephone?', 'Alexander Graham Bell'),
+      q('Which brothers made the first powered aeroplane flight?', 'The Wright brothers (Orville and Wilbur)'),
+      q('Which Scottish inventor demonstrated the first working television in 1926?', 'John Logie Baird'),
+      q('The World Wide Web was invented by Tim Berners-Lee in 1989 while he was working at NASA.', 'He was at CERN, not NASA.', true),
+      q('Which device for the deaf, the "bionic ear", was developed by Australian Graeme Clark?', 'The cochlear implant'),
+    ]),
+    cat('Words & Language', [
+      q('How many letters are in the English alphabet?', '26'),
+      q('What do you call a word that reads the same backwards, like "racecar"?', 'A palindrome'),
+      q('Which language has the most native speakers?', 'Mandarin Chinese'),
+      q('What do the letters "e.g." stand for in Latin?', 'Exempli gratia ("for example")'),
+      q('What is the (ridiculously long) name for the fear of long words?', 'Hippopotomonstrosesquippedaliophobia. Anything close and confident counts.'),
+    ]),
+    cat('Art', [
+      q('Who painted the Mona Lisa?', 'Leonardo da Vinci'),
+      q('Which Dutch painter cut off part of his own ear?', 'Vincent van Gogh'),
+      q('Which artist is famous for paintings of Campbell\'s Soup cans?', 'Andy Warhol'),
+      q('Who painted the ceiling of the Sistine Chapel?', 'Michelangelo'),
+      q('Which Norwegian artist painted The Scream?', 'Edvard Munch'),
+    ]),
+    cat('Gods & Legends', [
+      q('Who is the Norse god of thunder?', 'Thor'),
+      q('Who is the king of the Greek gods?', 'Zeus'),
+      q('What is the name of Thor\'s hammer?', 'Mjölnir'),
+      q('In Greek myth, Medusa could turn people to stone with a look, and she was slain by Hercules.', 'Perseus killed Medusa, not Hercules.', true),
+      q('What is the Norse name for the battle at the end of the world?', 'Ragnarök'),
+    ]),
+    cat('Cars', [
+      q('Which car company makes the Mustang?', 'Ford'),
+      q('Which country is Ferrari from?', 'Italy'),
+      q('What car is the time machine in Back to the Future?', 'A DeLorean (DMC-12)'),
+      q('Which Australian car brand made the Commodore?', 'Holden'),
+      q('What does BMW stand for?', 'Bayerische Motoren Werke (Bavarian Motor Works)'),
+    ]),
+    cat('Christmas', [
+      q('What is the name of Santa\'s red-nosed reindeer?', 'Rudolph'),
+      q('In "The Twelve Days of Christmas", what is given on the first day?', 'A partridge in a pear tree'),
+      q('Which film has the line "Keep the change, ya filthy animal"?', 'Home Alone'),
+      q('What is the name of the Grinch\'s dog?', 'Max'),
+      q('Which country started the tradition of decorated Christmas trees?', 'Germany'),
+    ]),
+    cat('Ghosts & Monsters', [
+      q('What is a vampire\'s traditional deadly weakness at dawn?', 'Sunlight'),
+      q('In the novel, who creates Frankenstein\'s monster?', 'Victor Frankenstein'),
+      q('Who wrote the novel Dracula?', 'Bram Stoker'),
+      q('Mary Shelley published Frankenstein in 1818, and its full title is Frankenstein; or, The Modern Hercules.', 'It\'s "The Modern Prometheus", not Hercules.', true),
+      q('In Scottish folklore, what is the shape-shifting water spirit that appears as a horse?', 'A kelpie'),
+    ]),
+    cat('Famous Villains', [
+      q('Who is Batman\'s clown-faced arch-enemy?', 'The Joker'),
+      q('Which Disney villain wants a coat made of puppies?', 'Cruella de Vil'),
+      q('Which Bond villain is famous for stroking a white cat?', 'Ernst Stavro Blofeld'),
+      q('In The Silence of the Lambs, what was Hannibal Lecter\'s job?', 'Psychiatrist'),
+      q('In Shakespeare\'s Othello, who tricks Othello into jealousy?', 'Iago'),
+    ]),
+    cat('Tech & Gadgets', [
+      q('Which company makes the iPhone?', 'Apple'),
+      q('What was Apple\'s portable music player, launched in 2001?', 'The iPod'),
+      q('What does USB stand for?', 'Universal Serial Bus'),
+      q('Microsoft was founded in 1975 by Bill Gates and Steve Jobs.', 'Gates founded it with Paul Allen. Steve Jobs co-founded Apple.', true),
+      q('What does HTTP stand for?', 'HyperText Transfer Protocol'),
+    ]),
+  ];
+
+  // Groups for the specialty picker.
+  const GROUPS = {
+    'Movies & TV': ['Movies', 'Horror Movies', 'Sci-Fi', '80s & 90s Movies', 'Cartoons', 'TV', 'Superheroes', 'Star Wars', 'Disney & Pixar', 'Sitcoms', 'Anime', 'James Bond', 'Harry Potter', 'Lord of the Rings'],
+    'Games': ['Video Games', 'Retro Games', 'Modern Games', 'Nintendo', 'Pokémon', 'Board Games'],
+    'Music': ['Music', 'Rock Music', 'Pop Music', 'Hip Hop', '80s Music', 'Aussie Music'],
+    'Brains': ['Science', 'Geography', 'History', 'Space', 'Animals', 'The Human Body', 'Maths & Numbers', 'Inventions', 'Words & Language', 'Art', 'Gods & Legends'],
+    'Life': ['Food & Drink', 'Straya', 'Sport', 'The Internet', 'Cars', 'Christmas', 'Tech & Gadgets'],
+    'Spooky': ['Hell & Myth', 'Demons & the Occult', 'Ghosts & Monsters', 'Famous Villains'],
+    'Anything goes': ['Name a...', 'Name another...'],
+  };
+  CATS.forEach(c => { c.group = Object.keys(GROUPS).find(k => GROUPS[k].includes(c.name)) || 'Anything goes'; });
+
+  const ROBINS = [
+    { q: 'Name horror movie villains.', a: 'Freddy, Jason, Michael Myers, Leatherface, Chucky, Pinhead, Ghostface, Pennywise, Candyman, Jigsaw, Hannibal Lecter, Norman Bates, Pazuzu (or Regan), Samara...' },
+    { q: 'Name Pokémon.', a: 'There are over 1,000. If they hesitate for too long, they\'re out.' },
+    { q: 'Name countries in Europe.', a: 'There are about 44. Turkey and Russia are borderline; your call, host.' },
+    { q: 'Name Christopher Nolan films.', a: 'Following, Memento, Insomnia, Batman Begins, The Prestige, The Dark Knight, Inception, The Dark Knight Rises, Interstellar, Dunkirk, Tenet, Oppenheimer, The Odyssey' },
+    { q: 'Name Marvel superheroes.', a: 'Comics count, not just the films.' },
+    { q: 'Name Simpsons characters.', a: 'Background characters count if they can name them.' },
+    { q: 'Name Star Wars characters.', a: 'Films, shows and cartoons all count.' },
+    { q: 'Name Pixar films.', a: 'Toy Story 1–4, A Bug\'s Life, Monsters Inc., Finding Nemo, The Incredibles, Cars, Ratatouille, WALL-E, Up, Brave, Inside Out, The Good Dinosaur, Coco, Onward, Soul, Luca, Turning Red, Lightyear, Elemental, Elio...' },
+    { q: 'Name video game consoles.', a: 'Handhelds count. Different models of the same console? Your call.' },
+    { q: 'Name Stephen King books.', a: 'Carrie, \'Salem\'s Lot, The Shining, The Stand, It, Misery, Pet Sematary, Cujo, Christine, The Green Mile, 11/22/63...' },
+    { q: 'Name capital cities.', a: 'Any country\'s capital.' },
+    { q: 'Name Australian animals.', a: 'Kangaroo, koala, wombat, platypus, echidna, emu, quokka, Tasmanian devil, dingo, cassowary, kookaburra...' },
+  ];
+
+  const FINALS = [
+    { cat: 'Video game movies', q: 'What was the first live-action feature film based on a video game to get a theatrical release?', a: 'Super Mario Bros. (1993). Tron is NOT right: the Tron game was based on the film.' },
+    { cat: 'The Devil in music', q: 'Which Rolling Stones song begins "Please allow me to introduce myself"?', a: '"Sympathy for the Devil"' },
+    { cat: 'Firsts', q: 'Who was the first woman to win a Nobel Prize?', a: 'Marie Curie (Physics, 1903)' },
+    { cat: 'Box office', q: 'What was the first film to make more than $2 billion worldwide?', a: 'Avatar (2009). Titanic only passed $2 billion after its 2012 re-release.' },
+    { cat: 'Aussie radio', q: 'What was the first song played on Double J (now Triple J) when it launched in 1975?', a: '"You Just Like Me \'Cos I\'m Good in Bed" by Skyhooks' },
+    { cat: 'Arcades', q: 'What was Atari\'s first big hit arcade game, released in 1972?', a: 'Pong' },
+    { cat: 'Dante\'s Inferno', q: 'In Dante\'s Inferno, which circle of Hell punishes the gluttonous?', a: 'The third circle' },
+    { cat: 'Long-running TV', q: 'What is the longest-running American scripted primetime TV series?', a: 'The Simpsons' },
+    { cat: 'Planets', q: 'Which planet has a day that is longer than its year?', a: 'Venus (a day is about 243 Earth days; a year is about 225)' },
+  ];
+
+  const STARTER = { title: 'Starter board', cats: CATS.slice(0, 5), robins: ROBINS.slice(0, 3), finals: FINALS.slice(0, 3) };
+  const LIBRARY = { cats: CATS, robins: ROBINS, finals: FINALS };
+
+  const api = { STARTER, LIBRARY };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.HGS_Q = api;
+})(typeof window !== 'undefined' ? window : globalThis);
