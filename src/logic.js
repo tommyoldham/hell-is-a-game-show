@@ -12,7 +12,12 @@
 
   const POINTS = [1, 2, 3, 4, 5];
   const ROBIN_POINTS = { winner: 5, runnerUp: 2 };
-  const LIMITS = { cats: 8, robins: 4, finals: 3, q: 300, a: 300, name: 30 };
+  const LIMITS = { cats: 8, robins: 4, finals: 3, puzzles: 3, phrase: 52, q: 300, a: 300, name: 30 };
+  // The wheel: 24 wedges worth points per letter found, plus two Bankrupts and a
+  // Lose a Turn. Values stay small because a common letter can show up 4 times.
+  const WHEEL = [3, 1, 2, 'BANKRUPT', 1, 3, 2, 1, 5, 2, 'LOSE A TURN', 1, 3, 2, 1, 'BANKRUPT', 2, 1, 3, 2, 1, 4, 2, 1];
+  const PUZZLE = { vowelCost: 1, solveBonus: 3 };
+  const VOWELS = 'AEIOU';
 
   // ---------------------------------------------------------------- helpers
   function str(v, n) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n); }
@@ -37,13 +42,18 @@
     }));
     const robins = (Array.isArray(b.robins) ? b.robins : []).slice(0, LIMITS.robins).map(x => ({ q: str(x && x.q, LIMITS.q), a: str(x && x.a, LIMITS.a) }));
     const finals = (Array.isArray(b.finals) ? b.finals : []).slice(0, LIMITS.finals).map(x => ({ cat: str(x && x.cat, LIMITS.name), q: str(x && x.q, LIMITS.q), a: str(x && x.a, LIMITS.a) }));
-    return { title: str(b.title, 40), cats, robins, finals };
+    // Puzzles keep only letters and simple punctuation, in capitals.
+    const puzzles = (Array.isArray(b.puzzles) ? b.puzzles : []).slice(0, LIMITS.puzzles).map(x => ({
+      cat: str(x && x.cat, LIMITS.name),
+      a: str(x && x.a, LIMITS.phrase).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9 '&!?,.-]/g, '').replace(/\s+/g, ' ').trim(),
+    }));
+    return { title: str(b.title, 40), cats, robins, finals, puzzles };
   }
 
   // A fresh board drawn from the library: six categories, three round robins, three finals.
   function randomBoard(rng, nCats = 6) {
     const pick = (arr, n) => clone(shuffle(arr, rng).slice(0, n));
-    return { title: 'Random board', cats: pick(LIBRARY.cats, nCats), robins: pick(LIBRARY.robins, 3), finals: pick(LIBRARY.finals, 3) };
+    return { title: 'Random board', cats: pick(LIBRARY.cats, nCats), robins: pick(LIBRARY.robins, 3), finals: pick(LIBRARY.finals, 3), puzzles: pick(LIBRARY.puzzles, 2) };
   }
 
   // Puts each contestant's specialty category on the board, labelled with their
@@ -73,7 +83,7 @@
   // How much of a board is actually playable.
   function boardStats(b) {
     const questions = b.cats.reduce((n, c) => n + c.cells.filter(x => x.q).length, 0);
-    return { questions, robins: b.robins.filter(x => x.q).length, finals: b.finals.filter(x => x.q).length };
+    return { questions, robins: b.robins.filter(x => x.q).length, finals: b.finals.filter(x => x.q).length, puzzles: (b.puzzles || []).filter(x => /[A-Z]/.test(x.a)).length };
   }
 
   // ---------------------------------------------------------------- setup
@@ -84,6 +94,7 @@
     const used = {};
     board.cats.forEach((c, ci) => c.cells.forEach((x, r) => { if (!x.q) used[ci + '-' + r] = true; }));
     board.robins.forEach((x, k) => { if (!x.q) used['rr-' + k] = true; });
+    board.puzzles.forEach((x, k) => { if (!/[A-Z]/.test(x.a)) used['pz-' + k] = true; });
     return {
       hostId: room.showHostId,
       showText: !!room.showText,
@@ -101,6 +112,7 @@
       lockedOut: [],
       last: null,          // {pid, ok, delta} from the latest ruling
       robin: null,
+      puzzle: null,
       final: null,
       say: { text: '', at: now },
       seq: 0,
@@ -114,18 +126,20 @@
   function cellOf(g, cell) {
     if (!cell) return null;
     if (cell.robin != null) return g.board.robins[cell.robin] || null;
+    if (cell.puzzle != null) return g.board.puzzles[cell.puzzle] || null;
     const c = g.board.cats[cell.c];
     return c ? c.cells[cell.r] : null;
   }
-  function cellKey(cell) { return cell.robin != null ? 'rr-' + cell.robin : cell.c + '-' + cell.r; }
+  function cellKey(cell) { return cell.robin != null ? 'rr-' + cell.robin : cell.puzzle != null ? 'pz-' + cell.puzzle : cell.c + '-' + cell.r; }
   function cellValue(g) {
     const x = cellOf(g, g.cell);
-    return g.cell && g.cell.robin == null ? POINTS[g.cell.r] * (x && x.fraud ? 2 : 1) : 0;
+    return g.cell && g.cell.r != null ? POINTS[g.cell.r] * (x && x.fraud ? 2 : 1) : 0;
   }
   function boardLeft(g) {
     let n = 0;
     g.board.cats.forEach((c, ci) => c.cells.forEach((x, r) => { if (!g.used[ci + '-' + r]) n++; }));
     g.board.robins.forEach((x, k) => { if (!g.used['rr-' + k]) n++; });
+    g.board.puzzles.forEach((x, k) => { if (!g.used['pz-' + k]) n++; });
     return n;
   }
 
@@ -149,10 +163,14 @@
   }
 
   function pickCell(g, cell) {
-    if (cell.robin != null) {
-      // Turn order starts with whoever picked it and goes round the room.
-      const start = Math.max(0, g.contestants.indexOf(g.control));
-      const order = g.contestants.slice(start).concat(g.contestants.slice(0, start));
+    // Turn order starts with whoever picked it and goes round the room.
+    const start = Math.max(0, g.contestants.indexOf(g.control));
+    const order = g.contestants.slice(start).concat(g.contestants.slice(0, start));
+    if (cell.puzzle != null) {
+      g.cell = { puzzle: cell.puzzle };
+      g.puzzle = { order, turn: 0, banks: Object.fromEntries(order.map(id => [id, 0])), guessed: [], stage: 'spin', wedge: null, spins: 0, event: null, lastSolve: null, result: null };
+      g.phase = 'puzzle';
+    } else if (cell.robin != null) {
       g.cell = { robin: cell.robin };
       g.robin = { order, active: order.slice(), turn: 0, out: [], named: 0, result: null };
       g.phase = 'robin';
@@ -169,7 +187,7 @@
   }
 
   function backToBoard(g) {
-    g.cell = null; g.buzz = null; g.buzzes = []; g.lockedOut = []; g.robin = null;
+    g.cell = null; g.buzz = null; g.buzzes = []; g.lockedOut = []; g.robin = null; g.puzzle = null;
     if (boardLeft(g) > 0) g.phase = 'board';
     else startFinal(g);
   }
@@ -215,6 +233,25 @@
     }
   }
 
+  // ---------------------------------------------------------------- puzzles
+  const letters = s => String(s || '').toUpperCase().normalize('NFD').replace(/[^A-Z0-9]/g, '');
+  function puzzleNext(g) { const Z = g.puzzle; Z.turn = (Z.turn + 1) % Z.order.length; Z.stage = 'spin'; Z.wedge = null; }
+  function consonantsLeft(g) {
+    const Z = g.puzzle, a = cellOf(g, g.cell).a;
+    return [...new Set(a.replace(/[^A-Z]/g, ''))].some(l => !VOWELS.includes(l) && !Z.guessed.includes(l));
+  }
+  function puzzleWin(g, pid) {
+    const Z = g.puzzle;
+    const won = (Z.banks[pid] || 0) + PUZZLE.solveBonus;
+    g.scores[pid] += won;
+    g.control = pid;
+    Z.result = { winner: pid, won };
+    g.used[cellKey(g.cell)] = true;
+    g.phase = 'puzzleDone';
+  }
+  // The phrase with unguessed letters as '_' (digits and punctuation show).
+  function mask(phrase, guessed) { return phrase.replace(/[A-Z]/g, l => (guessed.includes(l) ? l : '_')); }
+
   // ---------------------------------------------------------------- intents
   // Handles one intent. Returns an error string, or '' when applied.
   function act(g, pid, msg, rng, now) {
@@ -239,7 +276,7 @@
       case 'pick': {
         if (g.phase !== 'board') return 'Not now.';
         if (!host && pid !== g.control) return 'It\'s not your pick.';
-        const cell = msg.robin != null ? { robin: msg.robin | 0 } : { c: msg.c | 0, r: msg.r | 0 };
+        const cell = msg.puzzle != null ? { puzzle: msg.puzzle | 0 } : msg.robin != null ? { robin: msg.robin | 0 } : { c: msg.c | 0, r: msg.r | 0 };
         if (!cellOf(g, cell) || g.used[cellKey(cell)]) return 'That one\'s gone.';
         pickCell(g, cell); bump(g); return '';
       }
@@ -282,13 +319,78 @@
         if (!host || (g.phase !== 'read' && g.phase !== 'buzzed')) return 'Not now.';
         g.last = null; closeCell(g); bump(g); return '';
       case 'toBoard':
-        if (!host || (g.phase !== 'answer' && g.phase !== 'robinDone')) return 'Not now.';
+        if (!host || (g.phase !== 'answer' && g.phase !== 'robinDone' && g.phase !== 'puzzleDone')) return 'Not now.';
         backToBoard(g); bump(g); return '';
 
       // ---- round robin
       case 'robinJudge':
         if (!host || g.phase !== 'robin') return 'Not now.';
         robinAdvance(g, !!msg.ok); bump(g); return '';
+
+      // ---- word puzzle: spin, call a consonant, buy a vowel or solve
+      case 'spin': case 'letter': case 'buyVowel': case 'solve': {
+        const Z = g.puzzle;
+        if (g.phase !== 'puzzle' || !Z) return 'Not now.';
+        if (pid !== Z.order[Z.turn]) return 'It\'s not your turn.';
+        const phrase = cellOf(g, g.cell).a;
+        if (msg.t === 'spin') {
+          if (Z.stage !== 'spin') return 'Pick a letter first.';
+          if (!consonantsLeft(g)) return 'No consonants left. Buy a vowel or solve it.';
+          const k = Math.floor(rng() * WHEEL.length);
+          const w = WHEEL[k];
+          Z.spins++; Z.wedge = k;
+          Z.event = { pid, kind: 'spin', wedge: k };
+          if (w === 'BANKRUPT') { Z.banks[pid] = 0; puzzleNext(g); Z.wedge = k; }
+          else if (w === 'LOSE A TURN') { puzzleNext(g); Z.wedge = k; }
+          else Z.stage = 'letter';
+          bump(g); return '';
+        }
+        if (msg.t === 'solve') {
+          if (Z.stage !== 'spin') return 'Pick a letter first.';
+          const text = str(msg.text, 80);
+          if (!letters(text)) return 'Type the whole answer.';
+          if (letters(text) === letters(phrase)) { Z.event = { pid, kind: 'solve', ok: true }; puzzleWin(g, pid); }
+          else { Z.lastSolve = { pid, text }; Z.event = { pid, kind: 'solve', ok: false, text }; puzzleNext(g); }
+          bump(g); return '';
+        }
+        const l = String(msg.l || '').toUpperCase();
+        if (!/^[A-Z]$/.test(l)) return 'Pick a letter.';
+        if (Z.guessed.includes(l)) return 'That letter\'s been called.';
+        const vowel = VOWELS.includes(l);
+        if (msg.t === 'letter') {
+          if (Z.stage !== 'letter') return 'Spin first.';
+          if (vowel) return 'Vowels have to be bought.';
+        } else {
+          if (Z.stage !== 'spin') return 'Pick a consonant first.';
+          if (!vowel) return 'That\'s not a vowel.';
+          if ((Z.banks[pid] || 0) < PUZZLE.vowelCost) return `A vowel costs ${PUZZLE.vowelCost}. Win some points first.`;
+          Z.banks[pid] -= PUZZLE.vowelCost;
+        }
+        Z.guessed.push(l);
+        const count = phrase.split(l).length - 1;
+        const per = vowel ? 0 : WHEEL[Z.wedge];
+        Z.banks[pid] += count * per;
+        Z.event = { pid, kind: vowel ? 'vowel' : 'letter', l, count, won: count * per };
+        if (!count) puzzleNext(g);
+        else { Z.stage = 'spin'; Z.wedge = null; }
+        bump(g); return '';
+      }
+      // Host tools: count a typo'd solve, skip someone who's gone quiet, or give up.
+      case 'puzzleAccept': {
+        const Z = g.puzzle;
+        if (!host || g.phase !== 'puzzle' || !Z || !Z.lastSolve) return 'Not now.';
+        Z.event = { pid: Z.lastSolve.pid, kind: 'solve', ok: true };
+        puzzleWin(g, Z.lastSolve.pid); bump(g); return '';
+      }
+      case 'puzzleSkip':
+        if (!host || g.phase !== 'puzzle') return 'Not now.';
+        g.puzzle.event = { pid: g.puzzle.order[g.puzzle.turn], kind: 'skip' };
+        puzzleNext(g); bump(g); return '';
+      case 'puzzleEnd':
+        if (!host || g.phase !== 'puzzle') return 'Not now.';
+        g.puzzle.result = { winner: null, won: 0 };
+        g.used[cellKey(g.cell)] = true;
+        g.phase = 'puzzleDone'; bump(g); return '';
 
       // ---- final gamble
       case 'toFinal':
@@ -369,6 +471,7 @@
       board: {
         cats: b.cats.map((c, ci) => ({ name: c.name, tag: c.tag, cells: c.cells.map((x, r) => ({ pts: POINTS[r], used: !!g.used[ci + '-' + r], blank: !x.q })) })),
         robins: b.robins.map((x, k) => ({ used: !!g.used['rr-' + k], blank: !x.q })),
+        puzzles: b.puzzles.map((x, k) => ({ used: !!g.used['pz-' + k], blank: !/[A-Z]/.test(x.a), cat: x.cat })),
       },
       opening: { guesses: g.phase === 'guess' && !host ? (g.opening.guesses[pid] != null ? { [pid]: g.opening.guesses[pid] } : {}) : g.opening.guesses,
         secret: g.phase === 'guess' && !host ? null : g.opening.secret, winner: g.opening.winner, guessed: Object.keys(g.opening.guesses) },
@@ -376,7 +479,11 @@
       robin: g.robin,
       final: null,
     };
-    if (g.cell && cur) {
+    if (g.cell && cur && g.cell.puzzle != null) {
+      const Z = g.puzzle;
+      v.cell = { puzzle: g.cell.puzzle, cat: cur.cat, board: g.phase === 'puzzleDone' ? cur.a : mask(cur.a, Z.guessed), a: host || g.phase === 'puzzleDone' ? cur.a : null };
+      v.puzzle = Object.assign({}, Z, { consonantsLeft: g.phase === 'puzzle' ? consonantsLeft(g) : false });
+    } else if (g.cell && cur) {
       if (g.cell.robin != null) v.cell = { robin: g.cell.robin, q: cur.q, a: host || g.phase === 'robinDone' ? cur.a : null };
       else v.cell = { c: g.cell.c, r: g.cell.r, cat: b.cats[g.cell.c].name, pts: POINTS[g.cell.r], value: cellValue(g), fraud: cur.fraud,
         q: showQ ? cur.q : null, a: host || g.phase === 'answer' ? cur.a : null };
@@ -401,7 +508,7 @@
     return v;
   }
 
-  const api = { STARTER, LIBRARY, randomBoard, withSpecialties, POINTS, ROBIN_POINTS, LIMITS, cleanBoard, boardStats, createGame, act, viewFor, standings, shuffle, clone };
+  const api = { STARTER, LIBRARY, randomBoard, withSpecialties, POINTS, ROBIN_POINTS, LIMITS, WHEEL, PUZZLE, VOWELS, cleanBoard, boardStats, createGame, act, viewFor, standings, shuffle, clone };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HGS = api;
 })(typeof window !== 'undefined' ? window : globalThis);

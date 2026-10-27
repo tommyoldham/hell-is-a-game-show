@@ -30,7 +30,7 @@ show and shares the 4-letter code; everyone else joins with it.
   lobby (or uses the starter board), and can save or open it as a `.json` file.
   Boards autosave in the host's browser.
 - **Question library:** 50 ready-made categories of 5 questions each (movies, games,
-  music, science, Straya, spooky stuff and more), plus 12 round robins and 9 finals.
+  music, science, Straya, spooky stuff and more), plus 12 round robins, 57 word puzzles and 9 finals.
   The host can hit 🎲 Random board, add any library category, or write their own.
 - **Fresh questions:** ⚡ Fresh board fills 6 categories (about half a minute) and ⚡ +
   Fresh category adds one, from the free Open Trivia Database (CC BY-SA 4.0). It
@@ -59,6 +59,12 @@ show and shares the 4-letter code; everyone else joins with it.
 - **Round robins:** "name as many X as you can". Players take turns from whoever picked
   it, and the host taps ✔ (next player) or ✖ (out). With 3+ players the winner gets 5
   and second place gets 2.
+- **Word puzzles** 🎡 (Wheel of Fortune): a hidden phrase on a tile board. Players take
+  turns from whoever picked it. On your turn: spin the wheel (1 to 5 points per letter,
+  two Bankrupts that wipe your round bank, one Lose a Turn) and call a consonant, buy
+  a vowel for 1, or type a solve. Solving adds your round bank plus 3 to your score.
+  The host can count a typo'd solve, skip a quiet player, or end it. Up to 3 per
+  board; the library has 57.
 - **Final gamble:** last place picks one of up to 3 final categories. Everyone bets
   in secret (up to their score, or 5 if that's more), then types an answer. The host
   reveals the answers leader-first and rules on each one (½ wins half the bet).

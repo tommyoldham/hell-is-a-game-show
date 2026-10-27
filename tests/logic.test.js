@@ -36,7 +36,7 @@ function opening(g, act) {
 console.log('starter board');
 test('the starter board is complete: 5x5 board, 3 round robins, 3 finals, some fraud', () => {
   const b = H.cleanBoard(H.STARTER);
-  assert.deepStrictEqual(H.boardStats(b), { questions: 25, robins: 3, finals: 3 });
+  assert.deepStrictEqual(H.boardStats(b), { questions: 25, robins: 3, finals: 3, puzzles: 2 });
   assert(b.cats.every(c => c.cells.every(x => x.q && x.a)), 'every question has an answer for the host');
   assert(b.cats.some(c => c.cells.some(x => x.fraud)));
 });
@@ -60,7 +60,7 @@ test('the library has 20+ full categories, robins and finals, with no repeated q
 test('a random board has six different categories and survives cleanBoard intact', () => {
   const b = H.randomBoard(seeded(9));
   assert.strictEqual(new Set(b.cats.map(c => c.name)).size, 6);
-  assert.deepStrictEqual(H.boardStats(H.cleanBoard(b)), { questions: 30, robins: 3, finals: 3 });
+  assert.deepStrictEqual(H.boardStats(H.cleanBoard(b)), { questions: 30, robins: 3, finals: 3, puzzles: 2 });
   b.cats[0].cells[0].q = 'changed';
   assert.notStrictEqual(H.LIBRARY.cats.find(c => c.name === b.cats[0].name).cells[0].q, 'changed', 'boards are copies, not the library itself');
 });
@@ -291,6 +291,87 @@ test('clearing the whole board goes straight to the final', () => {
   ok(act('jack', { t: 'skip' }));
   ok(act('jack', { t: 'toBoard' }));
   assert.strictEqual(g.phase, 'wager', 'single final skips the category pick');
+});
+
+console.log('word puzzle (Wheel of Fortune)');
+// A wheel rigged to land on wedge k.
+const wedge = k => () => (k + 0.5) / H.WHEEL.length;
+function puzzleGame(phrase = 'GO TO HELL') {
+  const tiny = { cats: [{ name: 'One', cells: [{ q: 'q', a: 'a' }] }], robins: [], finals: [{ cat: 'F', q: 'fq', a: 'fa' }], puzzles: [{ cat: 'Phrase', a: phrase }] };
+  const t = newGame(tiny);
+  opening(t.g, t.act);
+  ok(t.act('jay', { t: 'pick', puzzle: 0 }));
+  t.spin = (pid, k) => H.act(t.g, pid, { t: 'spin' }, wedge(k), 0);
+  return t;
+}
+test('the library puzzles fit the board and use plain capitals', () => {
+  assert(H.LIBRARY.puzzles.length >= 40);
+  for (const z of H.LIBRARY.puzzles) {
+    assert.deepStrictEqual(H.cleanBoard({ puzzles: [z] }).puzzles[0], z, 'cleanBoard changes ' + z.a);
+    assert(z.a.length <= H.LIMITS.phrase && z.cat.length <= H.LIMITS.name, z.a);
+  }
+  assert.strictEqual(H.cleanBoard({ puzzles: [{ cat: 'x', a: '  piña   colada #1 ' }] }).puzzles[0].a, 'PINA COLADA 1');
+});
+test('spin, call consonants, buy vowels, bankrupt, lose a turn, then solve', () => {
+  const { g, act, spin } = puzzleGame();
+  const Z = g.puzzle;
+  assert.strictEqual(g.phase, 'puzzle');
+  assert.deepStrictEqual(Z.order, ['jay', 'mike', 'rich'], 'the picker goes first');
+  assert.notStrictEqual(spin('mike', 0), '', 'not mike\'s turn');
+  assert.notStrictEqual(act('jay', { t: 'buyVowel', l: 'O' }), '', 'no points to buy a vowel with');
+  assert.notStrictEqual(act('jay', { t: 'letter', l: 'L' }), '', 'spin first');
+  ok(spin('jay', 0));                           // 3 per letter
+  assert.notStrictEqual(act('jay', { t: 'letter', l: 'E' }), '', 'vowels are bought, not called');
+  ok(act('jay', { t: 'letter', l: 'L' }));      // two Ls: +6
+  assert.strictEqual(Z.banks.jay, 6);
+  assert.strictEqual(Z.turn, 0, 'a hit keeps the turn');
+  ok(act('jay', { t: 'buyVowel', l: 'O' }));    // -1
+  assert.strictEqual(Z.banks.jay, 5);
+  assert.notStrictEqual(act('jay', { t: 'buyVowel', l: 'O' }), '', 'already called');
+  assert.strictEqual(H.viewFor(g, 'mike').cell.board, '_O _O __LL', 'contestants see only called letters');
+  assert.strictEqual(H.viewFor(g, 'mike').cell.a, null);
+  assert.strictEqual(H.viewFor(g, 'jack').cell.a, 'GO TO HELL', 'the host sees the answer');
+  ok(spin('jay', 3));                           // BANKRUPT
+  assert.strictEqual(Z.banks.jay, 0);
+  assert.strictEqual(Z.order[Z.turn], 'mike');
+  ok(spin('mike', 10));                         // LOSE A TURN
+  assert.strictEqual(Z.order[Z.turn], 'rich');
+  ok(spin('rich', 8));                          // 5 per letter
+  ok(act('rich', { t: 'letter', l: 'Z' }));     // miss: next player
+  assert.strictEqual(Z.order[Z.turn], 'jay');
+  ok(spin('jay', 1));                           // 1 per letter
+  ok(act('jay', { t: 'letter', l: 'G' }));
+  ok(act('jay', { t: 'solve', text: 'go to hell!' }));
+  assert.strictEqual(g.phase, 'puzzleDone');
+  assert.strictEqual(g.scores.jay, 1 + H.PUZZLE.solveBonus, 'the solver banks their round winnings plus the bonus');
+  assert.strictEqual(g.scores.rich, 0, 'everyone else\'s round bank is lost');
+  assert.strictEqual(g.control, 'jay');
+  assert.strictEqual(H.viewFor(g, 'mike').cell.board, 'GO TO HELL');
+  ok(act('jack', { t: 'toBoard' }));
+  assert.strictEqual(g.phase, 'board');
+});
+test('a wrong solve passes the turn; the host can count a typo, skip, or end it', () => {
+  const { g, act, spin } = puzzleGame('THE SHINING');
+  ok(act('jay', { t: 'solve', text: 'The Shinnig' }));
+  assert.strictEqual(g.phase, 'puzzle');
+  assert.strictEqual(g.puzzle.order[g.puzzle.turn], 'mike');
+  ok(act('jack', { t: 'puzzleSkip' }));
+  assert.strictEqual(g.puzzle.order[g.puzzle.turn], 'rich');
+  ok(act('jack', { t: 'puzzleAccept' }));
+  assert.strictEqual(g.phase, 'puzzleDone');
+  assert.strictEqual(g.scores.jay, H.PUZZLE.solveBonus);
+  const t2 = puzzleGame();
+  ok(t2.act('jack', { t: 'puzzleEnd' }));
+  assert.strictEqual(t2.g.phase, 'puzzleDone');
+  assert.strictEqual(t2.g.puzzle.result.winner, null);
+});
+test('once every consonant is called, the wheel stops: buy vowels or solve', () => {
+  const { g, act, spin } = puzzleGame('GO TO HELL');
+  for (const [k, l] of [[0, 'G'], [0, 'T'], [0, 'H'], [0, 'L']]) { ok(spin('jay', k)); ok(act('jay', { t: 'letter', l })); }
+  assert.notStrictEqual(spin('jay', 0), '', 'no consonants left');
+  ok(act('jay', { t: 'buyVowel', l: 'E' }));
+  ok(act('jay', { t: 'solve', text: 'GO TO HELL' }));
+  assert.strictEqual(g.phase, 'puzzleDone');
 });
 
 console.log('fresh questions (Open Trivia DB)');

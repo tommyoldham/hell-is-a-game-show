@@ -24,6 +24,7 @@
     read: ['Fraud question! Something in this statement is a lie. Correct me.', 'Buzzers ready. Try not to embarrass yourselves.', 'Big swing. I respect it. I don\'t like it, but I respect it.'],
     ruling: ['I\'ll allow it.', 'I will NOT allow it.', 'That is... correct. Ugh.', 'Wrong. Hell has never been prouder.', 'Do not argue with the host. The host has a spreadsheet.'],
     robin: ['Round robin. No buzzers. Name a thing until you can\'t.', 'Tick tock.', 'Is that a real one? ...Fine.'],
+    puzzle: ['Spin the wheel of eternal torment. It\'s just a wheel. Spin it.', 'Bankrupt! My favourite wedge.', 'Buy a vowel. They\'re cheap. Like you.'],
     final: ['Final gamble. Bet what you like. Lose it all if you like.', 'Last place picks the category. Pity is a powerful thing.', 'Write it down. No mumbling. Mumbling is not an answer.'],
   };
 
@@ -462,6 +463,8 @@
         else if (g.cell) { const tag = (g.board.cats[g.cell.c] || {}).tag; splash(`${g.cell.cat}`, `for ${g.cell.pts}${tag ? ' · ' + tag : ''}`, 'cat', 1300); }
       }
       if (g.phase === 'robin') { play('question', 0.5); splash('ROUND ROBIN', g.cell && g.cell.q, 'robin', 2000); }
+      if (g.phase === 'puzzle') { play('gong'); splash('WORD PUZZLE', g.cell && g.cell.cat, 'robin', 1800); }
+      if (g.phase === 'puzzleDone') { const r = g.puzzle && g.puzzle.result; if (r && r.winner) { play('correct'); stage.burst(['#ffd84a', '#ff4b2b', '#7dff6a']); splash(`${name(r.winner)} SOLVED IT!`, `+${num(r.won)}`, 'good', 1800); } else play('wrong'); }
       if (g.phase === 'board' && p.phase === 'guess') { play('ding'); splash(`${name(g.control)} picks first!`, g.opening.secret != null ? `The number was ${g.opening.secret}` : '', 'good', 1800); }
       if (g.phase === 'robinDone') { play('ding'); const r = g.robin && g.robin.result; if (r && r.winner) splash(`${name(r.winner)} wins it!`, `+${H.ROBIN_POINTS.winner}`, 'good'); }
       if ((g.phase === 'finalPick' || g.phase === 'wager') && p.phase === 'board') { play('gong'); stage.set({ mood: 'wide' }); stage.shake(400); splash('FINAL GAMBLE', 'Bet it all. Or don\'t. Coward.', 'fraud', 2000); }
@@ -486,6 +489,15 @@
       splash(g.last.half ? 'HALF!' : g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
       if (!g.last.ok) { S.fallAt[g.last.pid] = stage.now(); setTimeout(() => play('trapdoor', 0.4), 200); stage.set({ mood: 'smirk' }); }
       else stage.set({ mood: 'bored' });
+    }
+    // A new puzzle move: a spin (even one landing where the last did) or a letter.
+    const E = g.puzzle && g.puzzle.event, PZ = p.puzzle || {};
+    if (g.phase === 'puzzle' && E && (JSON.stringify(E) !== JSON.stringify(PZ.event || null) || g.puzzle.spins !== PZ.spins)) {
+      if (E.kind === 'spin') { play('drumroll', 0.4); spinWheel(E.wedge); }
+      else if (E.kind === 'letter' || E.kind === 'vowel') {
+        if (E.count) { for (let i = 0; i < Math.min(E.count, 5); i++) setTimeout(() => play('lock', 0.5), i * 160); }
+        else play('buzzer', 0.5);
+      } else if (E.kind === 'solve' && !E.ok) { play('wrong'); splash('WRONG!', `"${E.text}"`, 'bad', 1300); }
     }
     if (g.robin && p.robin && g.robin.out.length > p.robin.out.length) {
       play('wrong');
@@ -560,6 +572,9 @@
           else if (R.active[R.turn] === id) { glow = true; mood = 'think'; }
         }
         if (g.phase === 'robinDone' && R && R.result && R.result.winner === id) mood = 'happy';
+        const Z = g.puzzle;
+        if (Z && g.phase === 'puzzle' && Z.order[Z.turn] === id) { glow = true; mood = 'think'; }
+        if (Z && g.phase === 'puzzleDone' && Z.result && Z.result.winner === id) mood = 'happy';
         if (g.phase === 'over') mood = H.standings(g)[0].id === id ? 'happy' : 'idle';
         return { id, color: p.color, look: p.look, connected: p.connected, mood, answered: glow, bet: g.control === id && g.phase === 'board', falling };
       }),
@@ -722,6 +737,7 @@
           <li><b>Buzz in</b> to answer. The host stops reading the moment you buzz. Wrong answers <b>cost</b> the points.</li>
           <li><b>Fraud questions</b> are statements with a lie in them. Buzz in and correct it for <b>double points</b>.</li>
           <li><b>Round robins</b>: take turns naming things until you can't. Winner gets 5, second gets 2.</li>
+          <li><b>Word puzzles</b> 🎡: spin the wheel, call consonants for points per letter, buy vowels, and solve to bank it (+3). Bankrupt wipes your round.</li>
           <li><b>Final gamble</b>: last place picks the category, everyone secretly bets (up to their score, or 5 if that's more), then writes an answer.</li>
           <li>The host's rulings are final. Argue anyway.</li>
         </ul>
@@ -809,8 +825,8 @@
   }
   function buildEditor() {
     const d = S.draft;
-    d.cats = d.cats || []; d.robins = d.robins || []; d.finals = d.finals || [];
-    const tabs = d.cats.map((c, k) => ({ k, label: c.name || `Category ${k + 1}` })).concat([{ k: 'rr', label: '🔁 Round robins' }, { k: 'fin', label: '🎲 Final gamble' }]);
+    d.cats = d.cats || []; d.robins = d.robins || []; d.finals = d.finals || []; d.puzzles = d.puzzles || [];
+    const tabs = d.cats.map((c, k) => ({ k, label: c.name || `Category ${k + 1}` })).concat([{ k: 'rr', label: '🔁 Round robins' }, { k: 'pz', label: '🎡 Word puzzles' }, { k: 'fin', label: '🎲 Final gamble' }]);
     if (typeof S.tab === 'number' && S.tab >= d.cats.length) S.tab = d.cats.length ? 0 : 'rr';
     let body = '';
     if (typeof S.tab === 'number') {
@@ -830,6 +846,12 @@
         ${[0, 1, 2, 3].map(k => { const x = d.robins[k] || { q: '', a: '' }; return `<div class="ecell"><b>${k + 1}</b>
           <input data-e="rq" data-r="${k}" maxlength="300" placeholder="Name...  e.g. Name Pokémon" value="${esc(x.q)}">
           <input data-e="ra" data-r="${k}" maxlength="300" placeholder="Notes for you (optional)" value="${esc(x.a)}"></div>`; }).join('')}`;
+    } else if (S.tab === 'pz') {
+      body = `<p class="fine">Wheel of Fortune puzzles. Up to ${H.LIMITS.puzzles}, each a 🎡 tile on the board. Players spin, call consonants, buy vowels and solve.
+          <button class="small" type="button" data-e="pz-random">🎲 Random puzzles</button></p>
+        ${[0, 1, 2].map(k => { const x = d.puzzles[k] || { cat: '', a: '' }; return `<div class="ecell"><b>${k + 1}</b>
+          <input data-e="pc" data-r="${k}" maxlength="30" placeholder="Category, e.g. Movie" value="${esc(x.cat)}">
+          <input data-e="pa" data-r="${k}" maxlength="${H.LIMITS.phrase}" placeholder="The hidden phrase, e.g. HIGHWAY TO HELL" value="${esc(x.a)}"></div>`; }).join('')}`;
     } else {
       body = `<p class="fine">Up to 3. Last place picks one; everyone wagers and writes an answer.
           ${trivia ? `<button class="small" type="button" data-e="gen-finals" ${S.gen ? 'disabled' : ''}>⚡ Fresh finals</button>` : ''}</p>
@@ -852,7 +874,7 @@
         <button class="small" type="button" data-e="export">Save to file</button>
         <label class="small filebtn">Open file<input type="file" accept=".json,application/json" data-e="import" hidden></label>
       </div>
-      <p class="fine">${st.questions} questions · ${st.robins} round robins · ${st.finals} finals</p>
+      <p class="fine">${st.questions} questions · ${st.robins} round robins · ${st.puzzles} word puzzles · ${st.finals} finals</p>
       <div class="etabs">${tabs.map(t => `<button type="button" class="${t.k === S.tab ? 'on' : ''}" data-e="tab" data-k="${t.k}">${esc(t.label)}</button>`).join('')}
         ${d.cats.length < H.LIMITS.cats ? `<button type="button" data-e="cat-add">+ Blank</button>
           <select data-e="lib-add"><option value="">+ From library (${H.LIBRARY.cats.length})…</option>${H.LIBRARY.cats.map((c, k) => d.cats.some(x => x.name === c.name) ? '' : `<option value="${k}">${esc(c.name)}</option>`).join('')}</select>` : ''}</div>
@@ -867,6 +889,7 @@
     else if (k === 'q' || k === 'a') c.cells[r][k] = el.value;
     else if (k === 'fraud') c.cells[r].fraud = el.checked;
     else if (k === 'rq' || k === 'ra') { d.robins[r] = d.robins[r] || { q: '', a: '' }; d.robins[r][k === 'rq' ? 'q' : 'a'] = el.value; }
+    else if (k === 'pc' || k === 'pa') { d.puzzles[r] = d.puzzles[r] || { cat: '', a: '' }; d.puzzles[r][k === 'pc' ? 'cat' : 'a'] = k === 'pa' ? el.value.toUpperCase() : el.value; }
     else if (k === 'fc' || k === 'fq' || k === 'fa') { d.finals[r] = d.finals[r] || { cat: '', q: '', a: '' }; d.finals[r]['fc' === k ? 'cat' : k === 'fq' ? 'q' : 'a'] = el.value; }
     else return;
     draftChanged();
@@ -913,13 +936,14 @@
           return trivia.category(id).then(c => cats.push(c), () => {});
         }), Promise.resolve()).then(() => {
           if (!cats.length) throw new Error('Couldn\'t reach the trivia database. Check your internet and try again.');
-          S.draft = { title: 'Fresh board', cats, robins: H.shuffle(H.LIBRARY.robins, rng).slice(0, 3).map(H.clone), finals: d.finals.length ? d.finals : H.shuffle(H.LIBRARY.finals, rng).slice(0, 3).map(H.clone) };
+          S.draft = { title: 'Fresh board', cats, robins: H.shuffle(H.LIBRARY.robins, rng).slice(0, 3).map(H.clone), puzzles: H.shuffle(H.LIBRARY.puzzles, rng).slice(0, 2).map(H.clone), finals: d.finals.length ? d.finals : H.shuffle(H.LIBRARY.finals, rng).slice(0, 3).map(H.clone) };
           S.tab = 0; draftChanged();
           return trivia.finals(3).then(f => { if (f.length === 3) { S.draft.finals = f; draftChanged(); } }, () => {});
         });
       });
       return;
     }
+    else if (k === 'pz-random') { d.puzzles = H.shuffle(H.LIBRARY.puzzles, rng).slice(0, 2).map(H.clone); draftChanged(); }
     else if (k === 'gen-finals') { generate('Fetching fresh finals…', () => trivia.finals(3).then(f => { if (!f.length) throw new Error('No fresh finals came back. Try again.'); d.finals = f; draftChanged(); })); return; }
     else if (k === 'swap') {
       const c = d.cats[S.tab], r = +b.dataset.r;
@@ -927,7 +951,7 @@
       return;
     }
     else if (k === 'starter') { if (!confirm('Replace your board with the starter board?')) return; S.draft = H.clone(H.STARTER); S.tab = 0; draftChanged(); }
-    else if (k === 'blank') { if (!confirm('Start a blank board? Your current board will be replaced (save it to a file first if you want to keep it).')) return; S.draft = { title: '', cats: [0, 1, 2, 3].map(() => ({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) })), robins: [], finals: [] }; S.tab = 0; draftChanged(); }
+    else if (k === 'blank') { if (!confirm('Start a blank board? Your current board will be replaced (save it to a file first if you want to keep it).')) return; S.draft = { title: '', cats: [0, 1, 2, 3].map(() => ({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) })), robins: [], finals: [], puzzles: [] }; S.tab = 0; draftChanged(); }
     else if (k === 'export') {
       const blob = new Blob([JSON.stringify(H.cleanBoard(S.draft), null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -970,6 +994,7 @@
       case 'board': return renderBoard(g, host);
       case 'read': case 'buzzed': case 'answer': return renderQuestion(g, host, playing);
       case 'robin': case 'robinDone': return renderRobin(g, host);
+      case 'puzzle': case 'puzzleDone': return renderPuzzle(g, host);
       case 'finalPick': case 'wager': case 'finalQ': case 'finalReveal': return renderFinal(g, host, playing);
       case 'over': return renderOver(g);
     }
@@ -998,23 +1023,27 @@
     const fresh = Object.values(b.cats).every(c => c.cells.every(x => !x.used || x.blank)) && b.robins.every(x => !x.used || x.blank) && g.opening.winner;
     const canPick = mine || host;
     const robins = b.robins.map((x, k) => ({ x, k })).filter(o => !o.x.blank);
+    const puzzles = (b.puzzles || []).map((x, k) => ({ x, k })).filter(o => !o.x.blank);
+    const pzCell = o => (o.x.used ? '<div class="bcell gone"></div>' : `<button class="bcell puzzle" data-act="pick" data-puzzle="${o.k}" ${canPick ? '' : 'disabled'} title="Word puzzle: ${esc(o.x.cat)}">🎡</button>`);
     return `<div class="panel">
       ${fresh && g.opening.secret != null ? `<p class="banner">The number was <b>${g.opening.secret}</b>. ${nm(g, g.opening.winner)} was closest (${g.opening.guesses[g.opening.winner] != null ? g.opening.guesses[g.opening.winner] : 'no guess'}).</p>` : ''}
       <p class="center pickline">${mine ? '<b class="hot">Your pick!</b> Choose a category and a difficulty.' : `<b>${nm(g, g.control)}</b> has control of the board${host ? ' (you can pick for them)' : ''}.`}</p>
-      <div class="board" style="--cols:${b.cats.length + (robins.length ? 1 : 0)}">
+      <div class="board" style="--cols:${b.cats.length + (robins.length ? 1 : 0) + (puzzles.length ? 1 : 0)}">
         ${b.cats.map(c => `<div class="bhead">${esc(c.name || '???')}${c.tag ? `<small>⭐ ${esc(c.tag)}</small>` : ''}</div>`).join('')}
         ${robins.length ? '<div class="bhead robin">Round robin</div>' : ''}
+        ${puzzles.length ? '<div class="bhead puzzle">Word puzzle</div>' : ''}
         ${[0, 1, 2, 3, 4].map(r => b.cats.map((c, ci) => {
           const x = c.cells[r];
           if (x.blank || x.used) return '<div class="bcell gone"></div>';
           return `<button class="bcell" data-act="pick" data-c="${ci}" data-r="${r}" ${canPick ? '' : 'disabled'}>${x.pts}</button>`;
-        }).join('') + (robins.length ? (robins[r] ? (robins[r].x.used ? '<div class="bcell gone"></div>' : `<button class="bcell robin" data-act="pick" data-robin="${robins[r].k}" ${canPick ? '' : 'disabled'}>🔁</button>`) : '<div class="bcell none"></div>') : '')).join('')}
+        }).join('') + (robins.length ? (robins[r] ? (robins[r].x.used ? '<div class="bcell gone"></div>' : `<button class="bcell robin" data-act="pick" data-robin="${robins[r].k}" ${canPick ? '' : 'disabled'}>🔁</button>`) : '<div class="bcell none"></div>') : '') + (puzzles.length ? (puzzles[r] ? pzCell(puzzles[r]) : '<div class="bcell none"></div>') : '')).join('')}
       </div>
       <div class="blist">
         ${b.cats.map((c, ci) => `<div class="brow"><div class="bhead">${esc(c.name || '???')}${c.tag ? `<small>⭐ ${esc(c.tag)}</small>` : ''}</div>${c.cells.map((x, r) => x.blank || x.used
           ? '<div class="bcell gone"></div>'
           : `<button class="bcell" data-act="pick" data-c="${ci}" data-r="${r}" ${canPick ? '' : 'disabled'}>${x.pts}</button>`).join('')}</div>`).join('')}
         ${robins.length ? `<div class="brow"><div class="bhead robin">Round robin</div>${robins.map(o => o.x.used ? '<div class="bcell gone"></div>' : `<button class="bcell robin" data-act="pick" data-robin="${o.k}" ${canPick ? '' : 'disabled'}>🔁</button>`).join('')}</div>` : ''}
+        ${puzzles.length ? `<div class="brow"><div class="bhead puzzle">Word puzzle</div>${puzzles.map(pzCell).join('')}</div>` : ''}
       </div>
     </div>`;
   }
@@ -1077,6 +1106,119 @@
       ${cur === me.id ? '<p class="buzzed me"><b>YOUR TURN</b><span>Name one out loud!</span></p>' : `<p class="waiting">${nm(g, cur)}'s turn…</p>`}
       ${host ? `${c.a ? `<p class="fine">${esc(c.a)}</p>` : ''}
         <div class="judge"><button class="big good" data-act="robinJudge" data-ok="1">✔ Good one, next</button><button class="big bad" data-act="robinJudge" data-ok="0">✖ ${nm(g, cur)} is out</button></div>` : ''}
+    </div>`;
+  }
+
+  // ---------- word puzzle
+  // Wedge colours go round the wheel; Bankrupt is black, Lose a Turn white.
+  const WEDGE_COLORS = ['#e0281e', '#ffb627', '#2e8a28', '#2e6ae0', '#c88bff', '#ff7a2a'];
+  function wedgeLabel(w) { return w === 'BANKRUPT' ? 'BANKRUPT' : w === 'LOSE A TURN' ? 'LOSE A TURN' : w + (w === 1 ? ' pt' : ' pts'); }
+  function wheelHTML() {
+    const n = H.WHEEL.length, step = 360 / n;
+    const stops = H.WHEEL.map((w, k) => {
+      const c = w === 'BANKRUPT' ? '#111' : w === 'LOSE A TURN' ? '#f2f2f2' : WEDGE_COLORS[k % WEDGE_COLORS.length];
+      return `${c} ${k * step}deg ${(k + 1) * step}deg`;
+    }).join(', ');
+    const labels = H.WHEEL.map((w, k) => `<span style="transform:rotate(${(k + 0.5) * step}deg)" class="${w === 'LOSE A TURN' ? 'dark' : ''}">${w === 'BANKRUPT' ? '💀' : w === 'LOSE A TURN' ? '⏭' : w}</span>`).join('');
+    return `<div class="wheelwrap"><div class="pointer">▼</div><div class="wheel" style="background:conic-gradient(${stops});transform:rotate(${S.wheelRot || 0}deg)">${labels}<i></i></div></div>`;
+  }
+  // The wheel turns in JS so a re-render mid-spin doesn't restart it.
+  const SPIN_MS = 3200;
+  function spinWheel(k) {
+    const step = 360 / H.WHEEL.length;
+    const from = S.wheelRot || 0;
+    // Land wedge k under the pointer at the top, a little off-centre, after 4+ turns.
+    const land = 360 - (k + 0.2 + Math.random() * 0.6) * step;
+    const to = from - (from % 360) + 360 * 4 + land;
+    const A = S.wheelAnim = { from, to, start: performance.now() };
+    const finish = () => { if (S.wheelAnim !== A) return; S.wheelAnim = null; S.wheelRot = to % 360; render(); landed(); };
+    const tick = () => {
+      if (S.wheelAnim !== A) return;
+      const t = Math.min(1, (performance.now() - A.start) / SPIN_MS);
+      S.wheelRot = A.from + (A.to - A.from) * (1 - Math.pow(1 - t, 3));
+      const el = app.querySelector('.wheel');
+      if (el) el.style.transform = `rotate(${S.wheelRot}deg)`;
+      if (t < 1) requestAnimationFrame(tick); else finish();
+    };
+    requestAnimationFrame(tick);
+    // Background tabs get no animation frames; the timer still lands the wheel.
+    setTimeout(finish, SPIN_MS + 60);
+  }
+  function spinning() { return !!S.wheelAnim; }
+  // Sound and a splash once the wheel stops.
+  function landed() {
+    const v = S.view, g = v && v.game, Z = g && g.puzzle;
+    if (!Z || !Z.event || Z.event.kind !== 'spin') return;
+    const w = H.WHEEL[Z.event.wedge], who = g.names[Z.event.pid] || '?';
+    if (w === 'BANKRUPT') { play('trapdoor'); setTimeout(() => play('loser'), 300); stage.shake(500); stage.set({ mood: 'smirk' }); splash('BANKRUPT!', `${who} loses their round bank`, 'bad', 1500); }
+    else if (w === 'LOSE A TURN') { play('buzzer'); splash('LOSE A TURN', who, 'bad', 1200); }
+    else { play('ding', 0.5); splash(`${w} ${w === 1 ? 'POINT' : 'POINTS'}`, `per letter · ${who} calls a consonant`, 'cat', 1100); }
+  }
+  function letterBoard(text) {
+    // Only letters revealed in the last moment flip, not every letter on every update.
+    if (S.pzBoard !== text) {
+      const prev = S.pzBoard && S.pzBoard.length === text.length ? S.pzBoard : null;
+      S.pzNew = new Set(prev ? [...text].map((ch, i) => (prev[i] === '_' && ch !== '_' ? i : -1)).filter(i => i >= 0) : []);
+      S.pzNewAt = performance.now(); S.pzBoard = text;
+    }
+    const fresh = performance.now() - S.pzNewAt < 600;
+    let pos = 0; // index into text, skipping the spaces between words
+    const tile = ch => {
+      const i = pos++;
+      if (!/[A-Z_]/.test(ch)) return `<b class="punct">${esc(ch)}</b>`;
+      return `<b class="${ch === '_' ? 'hid' : fresh && S.pzNew.has(i) ? 'show' : ''}">${ch === '_' ? '' : ch}</b>`;
+    };
+    // Words stay whole; long phrases wrap between words.
+    return `<div class="pzboard">${text.split(' ').map(word => { const w = [...word].map(tile).join(''); pos++; return `<span class="pzword">${w}</span>`; }).join('')}</div>`;
+  }
+  function renderPuzzle(g, host) {
+    const Z = g.puzzle, c = g.cell;
+    if (!Z || !c) return '';
+    const cur = Z.order[Z.turn];
+    const head = `<div class="qhead"><span>Word puzzle · ${esc(c.cat || 'Phrase')}</span><span>Vowels cost ${H.PUZZLE.vowelCost} · solving adds +${H.PUZZLE.solveBonus}</span></div>`;
+    const banks = `<ol class="turns banks">${Z.order.map(id => `<li class="${id === cur && g.phase === 'puzzle' ? 'now' : ''}">${nm(g, id)} <b>${num(Z.banks[id] || 0)}</b></li>`).join('')}</ol>`;
+    if (g.phase === 'puzzleDone') {
+      const r = Z.result || {};
+      return `<div class="panel center">${head}${letterBoard(c.board)}
+        <p class="result ${r.winner ? 'good' : 'bad'}">${r.winner ? `${nm(g, r.winner)} solved it! +${num(r.won)}` : 'Nobody solved it.'}</p>
+        ${host ? '<button class="big fire" data-act="toBoard">Back to the board ▶</button>' : ''}</div>`;
+    }
+    const used = l => Z.guessed.includes(l);
+    const keys = (set, act, on) => `<div class="keys">${[...set].map(l => `<button type="button" class="key" data-act="${act}" data-l="${l}" ${on && !used(l) ? '' : 'disabled'}>${l}</button>`).join('')}</div>`;
+    const CONS = 'BCDFGHJKLMNPQRSTVWXYZ';
+    const wedge = Z.wedge != null ? H.WHEEL[Z.wedge] : null;
+    const E = Z.event;
+    let news = '';
+    if (E && !spinning()) {
+      const who = nm(g, E.pid);
+      if (E.kind === 'letter' || E.kind === 'vowel') news = E.count ? `${who} called <b>${E.l}</b>: ${E.count} of them${E.won ? ` (+${E.won})` : ''}.` : `${who} called <b>${E.l}</b>. None!`;
+      else if (E.kind === 'solve' && !E.ok) news = `${who} guessed "${esc(E.text)}". Wrong!`;
+      else if (E.kind === 'skip') news = `${who}'s turn was skipped.`;
+      else if (E.kind === 'spin' && (wedge == null || typeof H.WHEEL[E.wedge] !== 'number')) news = `${who} hit <b>${wedgeLabel(H.WHEEL[E.wedge])}</b>.`;
+    }
+    let controls = '';
+    if (cur === me.id) {
+      if (spinning()) controls = '<p class="waiting">Spinning…</p>';
+      else if (Z.stage === 'letter') controls = `<p class="buzzed me"><b>${wedgeLabel(wedge)} per letter</b><span>Call a consonant</span></p>${keys(CONS, 'letter', true)}`;
+      else {
+        const bank = Z.banks[me.id] || 0;
+        controls = `<p class="buzzed me"><b>YOUR TURN</b><span>Spin, buy a vowel, or solve</span></p>
+          <div class="pzacts"><button class="big fire" data-act="spin" ${Z.consonantsLeft ? '' : 'disabled'}>🎡 Spin${Z.consonantsLeft ? '' : ' (no consonants left)'}</button></div>
+          <p class="fine">Buy a vowel for ${H.PUZZLE.vowelCost} (you have ${num(bank)}):</p>${keys(H.VOWELS, 'buyVowel', bank >= H.PUZZLE.vowelCost)}
+          <form class="rowform" data-act="solveForm"><input name="text" maxlength="80" data-keep="solve" placeholder="Solve the puzzle" autocomplete="off" required><button class="big">Solve</button></form>`;
+      }
+    } else {
+      controls = `<p class="waiting">${spinning() ? `${nm(g, cur)} is spinning…` : Z.stage === 'letter' ? `${nm(g, cur)} is calling a consonant for ${wedgeLabel(wedge)}…` : `${nm(g, cur)}'s turn…`}</p>`;
+    }
+    return `<div class="panel center puzzlepanel">${head}
+      ${letterBoard(c.board)}
+      ${host ? `<div class="reveal host"><span>Answer (just you)</span><b>${esc(c.a)}</b></div>` : ''}
+      <p class="fine called">Called: ${Z.guessed.length ? Z.guessed.join(' ') : 'nothing yet'}</p>
+      <div class="pzrow">${wheelHTML()}<div class="pzside">${banks}${news ? `<p class="news">${news}</p>` : ''}${controls}</div></div>
+      ${host ? `<div class="deskrow">
+        ${Z.lastSolve ? `<button class="small" data-act="puzzleAccept">✔ Count ${nm(g, Z.lastSolve.pid)}'s "${esc(Z.lastSolve.text)}" as right</button>` : ''}
+        <button class="small" data-act="puzzleSkip">⏭ Skip ${nm(g, cur)}'s turn</button>
+        <button class="small" data-act="puzzleEnd">Nobody gets it: reveal</button></div>` : ''}
     </div>`;
   }
 
@@ -1146,6 +1288,7 @@
       case 'read': case 'buzzed': return ['read', 'ruling'];
       case 'answer': return ['ruling'];
       case 'robin': case 'robinDone': return ['robin', 'ruling'];
+      case 'puzzle': case 'puzzleDone': return ['puzzle', 'ruling'];
       default: return ['final', 'ruling'];
     }
   }
@@ -1238,7 +1381,11 @@
       case 'start': send({ t: 'start' }); break;
       case 'toLobby': send({ t: 'lobby' }); break;
       case 'buzz': buzz(); break;
-      case 'pick': send(b.dataset.robin != null ? { t: 'pick', robin: +b.dataset.robin } : { t: 'pick', c: +b.dataset.c, r: +b.dataset.r }); break;
+      case 'pick': send(b.dataset.puzzle != null ? { t: 'pick', puzzle: +b.dataset.puzzle } : b.dataset.robin != null ? { t: 'pick', robin: +b.dataset.robin } : { t: 'pick', c: +b.dataset.c, r: +b.dataset.r }); break;
+      case 'spin': if (!spinning()) send({ t: 'spin' }); break;
+      case 'letter': case 'buyVowel': send({ t: act, l: b.dataset.l }); break;
+      case 'puzzleAccept': case 'puzzleSkip': send({ t: act }); break;
+      case 'puzzleEnd': if (confirm('End the puzzle with no winner?')) send({ t: 'puzzleEnd' }); break;
       case 'judge': send({ t: 'judge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
       case 'robinJudge': send({ t: 'robinJudge', ok: b.dataset.ok === '1' }); break;
       case 'finalJudge': send({ t: 'finalJudge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
@@ -1268,6 +1415,7 @@
     if (act === 'guessForm') send({ t: 'guess', n: +f.n.value });
     if (act === 'wagerForm') send({ t: 'wager', n: +f.n.value });
     if (act === 'finalForm') send({ t: 'finalAnswer', text: f.text.value });
+    if (act === 'solveForm') send({ t: 'solve', text: f.text.value });
     if (act === 'sayForm' && f.say.value.trim()) send({ t: 'say', text: f.say.value.trim() });
     const input = f.querySelector('input');
     if (input) { input.value = ''; input.blur(); }

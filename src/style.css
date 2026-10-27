@@ -362,3 +362,30 @@ canvas.avatar { width: 90px; height: 125px; image-rendering: pixelated; backgrou
 .avopt { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
 .avopt span { text-align: center; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .avopt i { font-style: normal; color: var(--muted); }
+
+/* word puzzle */
+.bhead.puzzle { background: #102a3d; box-shadow: inset 0 0 0 2px #5ad1ff; }
+.bcell.puzzle { color: #5ad1ff; }
+.pzboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 10px auto 6px; padding: 14px; max-width: 760px; background: #0f3a22; border: 4px solid #1a0508; box-shadow: inset 0 0 0 3px #2e8a28; }
+.pzword { display: inline-flex; gap: 4px; }
+.pzboard b { width: clamp(22px, 5.4vw, 42px); height: clamp(30px, 7vw, 54px); display: grid; place-items: center; font-family: var(--px); font-size: clamp(13px, 3.4vw, 26px); color: #111; background: #f6f1e0; border: 2px solid #1a0508; }
+.pzboard b.hid { background: #f6f1e0; box-shadow: inset 0 0 0 3px #d8cfb0; }
+.pzboard b.show { animation: flip .45s ease-out; }
+.pzboard b.punct { background: none; border: 0; color: #f6f1e0; width: auto; }
+@keyframes flip { 0% { transform: rotateY(90deg); background: #5ad1ff; } 100% { transform: none; } }
+.called { letter-spacing: 2px; }
+.pzrow { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: center; margin-top: 8px; }
+.pzside { flex: 1; min-width: 260px; max-width: 460px; }
+.wheelwrap { position: relative; width: min(260px, 70vw); aspect-ratio: 1; flex: none; }
+.wheelwrap .pointer { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 2; color: var(--gold); font-size: 30px; text-shadow: 0 2px 0 #1a0508; }
+.wheel { position: absolute; inset: 0; border-radius: 50%; border: 6px solid #ffb627; box-shadow: 0 0 0 4px #1a0508, 0 0 30px rgba(255,122,42,.4); }
+.wheel span { position: absolute; left: 50%; top: 0; height: 50%; width: 24px; margin-left: -12px; transform-origin: 50% 100%; padding-top: 6px; text-align: center; font-family: var(--px); font-size: 11px; color: #fff; text-shadow: 1px 1px 0 #000; }
+.wheel span.dark { color: #111; text-shadow: none; }
+.wheel i { position: absolute; inset: 40%; border-radius: 50%; background: #1a0508; border: 4px solid #ffb627; }
+.keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 8px 0; }
+.key { width: 38px; height: 40px; font-family: var(--px); font-size: 14px; background: #f6f1e0; color: #111; border: 2px solid #1a0508; cursor: pointer; }
+.key:disabled { opacity: .25; cursor: default; }
+.key:not(:disabled):hover { background: var(--gold); }
+.pzacts { margin: 8px 0; }
+.news { font-size: 20px; }
+.banks b { color: var(--gold); margin-left: 4px; }

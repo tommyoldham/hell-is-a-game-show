@@ -399,8 +399,30 @@
     { cat: 'Planets', q: 'Which planet has a day that is longer than its year?', a: 'Venus (a day is about 243 Earth days; a year is about 225)' },
   ];
 
-  const STARTER = { title: 'Starter board', cats: CATS.slice(0, 5), robins: ROBINS.slice(0, 3), finals: FINALS.slice(0, 3) };
-  const LIBRARY = { cats: CATS, robins: ROBINS, finals: FINALS };
+  // Wheel of Fortune puzzles: a category and a hidden phrase (max 52 characters).
+  const P = (cat, a) => ({ cat, a });
+  const PUZZLES = [
+    P('Phrase', 'SPEAK OF THE DEVIL'), P('Phrase', 'THE DEVIL IS IN THE DETAILS'), P('Phrase', 'A SNOWBALL\'S CHANCE IN HELL'),
+    P('Phrase', 'HELL HATH NO FURY'), P('Phrase', 'SELL YOUR SOUL'), P('Phrase', 'PLAYING WITH FIRE'),
+    P('Phrase', 'OUT OF THE FRYING PAN AND INTO THE FIRE'), P('Phrase', 'WHEN PIGS FLY'), P('Phrase', 'BREAK A LEG'),
+    P('Phrase', 'PIECE OF CAKE'), P('Phrase', 'BETTER LATE THAN NEVER'), P('Phrase', 'ONCE IN A BLUE MOON'),
+    P('Phrase', 'THE ELEPHANT IN THE ROOM'), P('Phrase', 'NO PAIN NO GAIN'), P('Phrase', 'BITE THE BULLET'),
+    P('Phrase', 'THE ROAD TO HELL IS PAVED WITH GOOD INTENTIONS'), P('Phrase', 'ALL HELL BROKE LOOSE'),
+    P('Movie', 'THE EXORCIST'), P('Movie', 'GHOSTBUSTERS'), P('Movie', 'BACK TO THE FUTURE'), P('Movie', 'JURASSIC PARK'),
+    P('Movie', 'THE LION KING'), P('Movie', 'PULP FICTION'), P('Movie', 'THE SHINING'), P('Movie', 'MAD MAX FURY ROAD'),
+    P('Movie', 'FINDING NEMO'), P('Movie', 'THE SILENCE OF THE LAMBS'),
+    P('Song', 'HIGHWAY TO HELL'), P('Song', 'BOHEMIAN RHAPSODY'), P('Song', 'SYMPATHY FOR THE DEVIL'), P('Song', 'HOTEL CALIFORNIA'),
+    P('Song', 'DOWN UNDER'), P('Song', 'THUNDERSTRUCK'), P('Song', 'BAT OUT OF HELL'),
+    P('TV show', 'THE SIMPSONS'), P('TV show', 'BREAKING BAD'), P('TV show', 'GAME OF THRONES'), P('TV show', 'STRANGER THINGS'),
+    P('TV show', 'NEIGHBOURS'), P('TV show', 'THE OFFICE'),
+    P('Character', 'DARTH VADER'), P('Character', 'SPONGEBOB SQUAREPANTS'), P('Character', 'HANNIBAL LECTER'), P('Character', 'SUPER MARIO'),
+    P('Place', 'SYDNEY OPERA HOUSE'), P('Place', 'THE GREAT BARRIER REEF'), P('Place', 'LAS VEGAS'), P('Place', 'MOUNT EVEREST'),
+    P('Food & drink', 'FAIRY BREAD'), P('Food & drink', 'VEGEMITE ON TOAST'), P('Food & drink', 'PINEAPPLE ON PIZZA'), P('Food & drink', 'A SNAG IN BREAD'),
+    P('Thing', 'A RED PITCHFORK'), P('Thing', 'A LAVA LAMP'), P('Thing', 'A RUBIK\'S CUBE'),
+  ];
+
+  const STARTER = { title: 'Starter board', cats: CATS.slice(0, 5), robins: ROBINS.slice(0, 3), finals: FINALS.slice(0, 3), puzzles: PUZZLES.slice(0, 2) };
+  const LIBRARY = { cats: CATS, robins: ROBINS, finals: FINALS, puzzles: PUZZLES };
 
   const api = { STARTER, LIBRARY };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

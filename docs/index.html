@@ -373,6 +373,33 @@ canvas.avatar { width: 90px; height: 125px; image-rendering: pixelated; backgrou
 .avopt span { text-align: center; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .avopt i { font-style: normal; color: var(--muted); }
 
+/* word puzzle */
+.bhead.puzzle { background: #102a3d; box-shadow: inset 0 0 0 2px #5ad1ff; }
+.bcell.puzzle { color: #5ad1ff; }
+.pzboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 10px auto 6px; padding: 14px; max-width: 760px; background: #0f3a22; border: 4px solid #1a0508; box-shadow: inset 0 0 0 3px #2e8a28; }
+.pzword { display: inline-flex; gap: 4px; }
+.pzboard b { width: clamp(22px, 5.4vw, 42px); height: clamp(30px, 7vw, 54px); display: grid; place-items: center; font-family: var(--px); font-size: clamp(13px, 3.4vw, 26px); color: #111; background: #f6f1e0; border: 2px solid #1a0508; }
+.pzboard b.hid { background: #f6f1e0; box-shadow: inset 0 0 0 3px #d8cfb0; }
+.pzboard b.show { animation: flip .45s ease-out; }
+.pzboard b.punct { background: none; border: 0; color: #f6f1e0; width: auto; }
+@keyframes flip { 0% { transform: rotateY(90deg); background: #5ad1ff; } 100% { transform: none; } }
+.called { letter-spacing: 2px; }
+.pzrow { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: center; margin-top: 8px; }
+.pzside { flex: 1; min-width: 260px; max-width: 460px; }
+.wheelwrap { position: relative; width: min(260px, 70vw); aspect-ratio: 1; flex: none; }
+.wheelwrap .pointer { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 2; color: var(--gold); font-size: 30px; text-shadow: 0 2px 0 #1a0508; }
+.wheel { position: absolute; inset: 0; border-radius: 50%; border: 6px solid #ffb627; box-shadow: 0 0 0 4px #1a0508, 0 0 30px rgba(255,122,42,.4); }
+.wheel span { position: absolute; left: 50%; top: 0; height: 50%; width: 24px; margin-left: -12px; transform-origin: 50% 100%; padding-top: 6px; text-align: center; font-family: var(--px); font-size: 11px; color: #fff; text-shadow: 1px 1px 0 #000; }
+.wheel span.dark { color: #111; text-shadow: none; }
+.wheel i { position: absolute; inset: 40%; border-radius: 50%; background: #1a0508; border: 4px solid #ffb627; }
+.keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 8px 0; }
+.key { width: 38px; height: 40px; font-family: var(--px); font-size: 14px; background: #f6f1e0; color: #111; border: 2px solid #1a0508; cursor: pointer; }
+.key:disabled { opacity: .25; cursor: default; }
+.key:not(:disabled):hover { background: var(--gold); }
+.pzacts { margin: 8px 0; }
+.news { font-size: 20px; }
+.banks b { color: var(--gold); margin-left: 4px; }
+
 </style>
 </head>
 <body>
@@ -784,8 +811,30 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     { cat: 'Planets', q: 'Which planet has a day that is longer than its year?', a: 'Venus (a day is about 243 Earth days; a year is about 225)' },
   ];
 
-  const STARTER = { title: 'Starter board', cats: CATS.slice(0, 5), robins: ROBINS.slice(0, 3), finals: FINALS.slice(0, 3) };
-  const LIBRARY = { cats: CATS, robins: ROBINS, finals: FINALS };
+  // Wheel of Fortune puzzles: a category and a hidden phrase (max 52 characters).
+  const P = (cat, a) => ({ cat, a });
+  const PUZZLES = [
+    P('Phrase', 'SPEAK OF THE DEVIL'), P('Phrase', 'THE DEVIL IS IN THE DETAILS'), P('Phrase', 'A SNOWBALL\'S CHANCE IN HELL'),
+    P('Phrase', 'HELL HATH NO FURY'), P('Phrase', 'SELL YOUR SOUL'), P('Phrase', 'PLAYING WITH FIRE'),
+    P('Phrase', 'OUT OF THE FRYING PAN AND INTO THE FIRE'), P('Phrase', 'WHEN PIGS FLY'), P('Phrase', 'BREAK A LEG'),
+    P('Phrase', 'PIECE OF CAKE'), P('Phrase', 'BETTER LATE THAN NEVER'), P('Phrase', 'ONCE IN A BLUE MOON'),
+    P('Phrase', 'THE ELEPHANT IN THE ROOM'), P('Phrase', 'NO PAIN NO GAIN'), P('Phrase', 'BITE THE BULLET'),
+    P('Phrase', 'THE ROAD TO HELL IS PAVED WITH GOOD INTENTIONS'), P('Phrase', 'ALL HELL BROKE LOOSE'),
+    P('Movie', 'THE EXORCIST'), P('Movie', 'GHOSTBUSTERS'), P('Movie', 'BACK TO THE FUTURE'), P('Movie', 'JURASSIC PARK'),
+    P('Movie', 'THE LION KING'), P('Movie', 'PULP FICTION'), P('Movie', 'THE SHINING'), P('Movie', 'MAD MAX FURY ROAD'),
+    P('Movie', 'FINDING NEMO'), P('Movie', 'THE SILENCE OF THE LAMBS'),
+    P('Song', 'HIGHWAY TO HELL'), P('Song', 'BOHEMIAN RHAPSODY'), P('Song', 'SYMPATHY FOR THE DEVIL'), P('Song', 'HOTEL CALIFORNIA'),
+    P('Song', 'DOWN UNDER'), P('Song', 'THUNDERSTRUCK'), P('Song', 'BAT OUT OF HELL'),
+    P('TV show', 'THE SIMPSONS'), P('TV show', 'BREAKING BAD'), P('TV show', 'GAME OF THRONES'), P('TV show', 'STRANGER THINGS'),
+    P('TV show', 'NEIGHBOURS'), P('TV show', 'THE OFFICE'),
+    P('Character', 'DARTH VADER'), P('Character', 'SPONGEBOB SQUAREPANTS'), P('Character', 'HANNIBAL LECTER'), P('Character', 'SUPER MARIO'),
+    P('Place', 'SYDNEY OPERA HOUSE'), P('Place', 'THE GREAT BARRIER REEF'), P('Place', 'LAS VEGAS'), P('Place', 'MOUNT EVEREST'),
+    P('Food & drink', 'FAIRY BREAD'), P('Food & drink', 'VEGEMITE ON TOAST'), P('Food & drink', 'PINEAPPLE ON PIZZA'), P('Food & drink', 'A SNAG IN BREAD'),
+    P('Thing', 'A RED PITCHFORK'), P('Thing', 'A LAVA LAMP'), P('Thing', 'A RUBIK\'S CUBE'),
+  ];
+
+  const STARTER = { title: 'Starter board', cats: CATS.slice(0, 5), robins: ROBINS.slice(0, 3), finals: FINALS.slice(0, 3), puzzles: PUZZLES.slice(0, 2) };
+  const LIBRARY = { cats: CATS, robins: ROBINS, finals: FINALS, puzzles: PUZZLES };
 
   const api = { STARTER, LIBRARY };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -808,7 +857,12 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
 
   const POINTS = [1, 2, 3, 4, 5];
   const ROBIN_POINTS = { winner: 5, runnerUp: 2 };
-  const LIMITS = { cats: 8, robins: 4, finals: 3, q: 300, a: 300, name: 30 };
+  const LIMITS = { cats: 8, robins: 4, finals: 3, puzzles: 3, phrase: 52, q: 300, a: 300, name: 30 };
+  // The wheel: 24 wedges worth points per letter found, plus two Bankrupts and a
+  // Lose a Turn. Values stay small because a common letter can show up 4 times.
+  const WHEEL = [3, 1, 2, 'BANKRUPT', 1, 3, 2, 1, 5, 2, 'LOSE A TURN', 1, 3, 2, 1, 'BANKRUPT', 2, 1, 3, 2, 1, 4, 2, 1];
+  const PUZZLE = { vowelCost: 1, solveBonus: 3 };
+  const VOWELS = 'AEIOU';
 
   // ---------------------------------------------------------------- helpers
   function str(v, n) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n); }
@@ -833,13 +887,18 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     }));
     const robins = (Array.isArray(b.robins) ? b.robins : []).slice(0, LIMITS.robins).map(x => ({ q: str(x && x.q, LIMITS.q), a: str(x && x.a, LIMITS.a) }));
     const finals = (Array.isArray(b.finals) ? b.finals : []).slice(0, LIMITS.finals).map(x => ({ cat: str(x && x.cat, LIMITS.name), q: str(x && x.q, LIMITS.q), a: str(x && x.a, LIMITS.a) }));
-    return { title: str(b.title, 40), cats, robins, finals };
+    // Puzzles keep only letters and simple punctuation, in capitals.
+    const puzzles = (Array.isArray(b.puzzles) ? b.puzzles : []).slice(0, LIMITS.puzzles).map(x => ({
+      cat: str(x && x.cat, LIMITS.name),
+      a: str(x && x.a, LIMITS.phrase).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9 '&!?,.-]/g, '').replace(/\s+/g, ' ').trim(),
+    }));
+    return { title: str(b.title, 40), cats, robins, finals, puzzles };
   }
 
   // A fresh board drawn from the library: six categories, three round robins, three finals.
   function randomBoard(rng, nCats = 6) {
     const pick = (arr, n) => clone(shuffle(arr, rng).slice(0, n));
-    return { title: 'Random board', cats: pick(LIBRARY.cats, nCats), robins: pick(LIBRARY.robins, 3), finals: pick(LIBRARY.finals, 3) };
+    return { title: 'Random board', cats: pick(LIBRARY.cats, nCats), robins: pick(LIBRARY.robins, 3), finals: pick(LIBRARY.finals, 3), puzzles: pick(LIBRARY.puzzles, 2) };
   }
 
   // Puts each contestant's specialty category on the board, labelled with their
@@ -869,7 +928,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   // How much of a board is actually playable.
   function boardStats(b) {
     const questions = b.cats.reduce((n, c) => n + c.cells.filter(x => x.q).length, 0);
-    return { questions, robins: b.robins.filter(x => x.q).length, finals: b.finals.filter(x => x.q).length };
+    return { questions, robins: b.robins.filter(x => x.q).length, finals: b.finals.filter(x => x.q).length, puzzles: (b.puzzles || []).filter(x => /[A-Z]/.test(x.a)).length };
   }
 
   // ---------------------------------------------------------------- setup
@@ -880,6 +939,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     const used = {};
     board.cats.forEach((c, ci) => c.cells.forEach((x, r) => { if (!x.q) used[ci + '-' + r] = true; }));
     board.robins.forEach((x, k) => { if (!x.q) used['rr-' + k] = true; });
+    board.puzzles.forEach((x, k) => { if (!/[A-Z]/.test(x.a)) used['pz-' + k] = true; });
     return {
       hostId: room.showHostId,
       showText: !!room.showText,
@@ -897,6 +957,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       lockedOut: [],
       last: null,          // {pid, ok, delta} from the latest ruling
       robin: null,
+      puzzle: null,
       final: null,
       say: { text: '', at: now },
       seq: 0,
@@ -910,18 +971,20 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   function cellOf(g, cell) {
     if (!cell) return null;
     if (cell.robin != null) return g.board.robins[cell.robin] || null;
+    if (cell.puzzle != null) return g.board.puzzles[cell.puzzle] || null;
     const c = g.board.cats[cell.c];
     return c ? c.cells[cell.r] : null;
   }
-  function cellKey(cell) { return cell.robin != null ? 'rr-' + cell.robin : cell.c + '-' + cell.r; }
+  function cellKey(cell) { return cell.robin != null ? 'rr-' + cell.robin : cell.puzzle != null ? 'pz-' + cell.puzzle : cell.c + '-' + cell.r; }
   function cellValue(g) {
     const x = cellOf(g, g.cell);
-    return g.cell && g.cell.robin == null ? POINTS[g.cell.r] * (x && x.fraud ? 2 : 1) : 0;
+    return g.cell && g.cell.r != null ? POINTS[g.cell.r] * (x && x.fraud ? 2 : 1) : 0;
   }
   function boardLeft(g) {
     let n = 0;
     g.board.cats.forEach((c, ci) => c.cells.forEach((x, r) => { if (!g.used[ci + '-' + r]) n++; }));
     g.board.robins.forEach((x, k) => { if (!g.used['rr-' + k]) n++; });
+    g.board.puzzles.forEach((x, k) => { if (!g.used['pz-' + k]) n++; });
     return n;
   }
 
@@ -945,10 +1008,14 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   }
 
   function pickCell(g, cell) {
-    if (cell.robin != null) {
-      // Turn order starts with whoever picked it and goes round the room.
-      const start = Math.max(0, g.contestants.indexOf(g.control));
-      const order = g.contestants.slice(start).concat(g.contestants.slice(0, start));
+    // Turn order starts with whoever picked it and goes round the room.
+    const start = Math.max(0, g.contestants.indexOf(g.control));
+    const order = g.contestants.slice(start).concat(g.contestants.slice(0, start));
+    if (cell.puzzle != null) {
+      g.cell = { puzzle: cell.puzzle };
+      g.puzzle = { order, turn: 0, banks: Object.fromEntries(order.map(id => [id, 0])), guessed: [], stage: 'spin', wedge: null, spins: 0, event: null, lastSolve: null, result: null };
+      g.phase = 'puzzle';
+    } else if (cell.robin != null) {
       g.cell = { robin: cell.robin };
       g.robin = { order, active: order.slice(), turn: 0, out: [], named: 0, result: null };
       g.phase = 'robin';
@@ -965,7 +1032,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   }
 
   function backToBoard(g) {
-    g.cell = null; g.buzz = null; g.buzzes = []; g.lockedOut = []; g.robin = null;
+    g.cell = null; g.buzz = null; g.buzzes = []; g.lockedOut = []; g.robin = null; g.puzzle = null;
     if (boardLeft(g) > 0) g.phase = 'board';
     else startFinal(g);
   }
@@ -1011,6 +1078,25 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     }
   }
 
+  // ---------------------------------------------------------------- puzzles
+  const letters = s => String(s || '').toUpperCase().normalize('NFD').replace(/[^A-Z0-9]/g, '');
+  function puzzleNext(g) { const Z = g.puzzle; Z.turn = (Z.turn + 1) % Z.order.length; Z.stage = 'spin'; Z.wedge = null; }
+  function consonantsLeft(g) {
+    const Z = g.puzzle, a = cellOf(g, g.cell).a;
+    return [...new Set(a.replace(/[^A-Z]/g, ''))].some(l => !VOWELS.includes(l) && !Z.guessed.includes(l));
+  }
+  function puzzleWin(g, pid) {
+    const Z = g.puzzle;
+    const won = (Z.banks[pid] || 0) + PUZZLE.solveBonus;
+    g.scores[pid] += won;
+    g.control = pid;
+    Z.result = { winner: pid, won };
+    g.used[cellKey(g.cell)] = true;
+    g.phase = 'puzzleDone';
+  }
+  // The phrase with unguessed letters as '_' (digits and punctuation show).
+  function mask(phrase, guessed) { return phrase.replace(/[A-Z]/g, l => (guessed.includes(l) ? l : '_')); }
+
   // ---------------------------------------------------------------- intents
   // Handles one intent. Returns an error string, or '' when applied.
   function act(g, pid, msg, rng, now) {
@@ -1035,7 +1121,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       case 'pick': {
         if (g.phase !== 'board') return 'Not now.';
         if (!host && pid !== g.control) return 'It\'s not your pick.';
-        const cell = msg.robin != null ? { robin: msg.robin | 0 } : { c: msg.c | 0, r: msg.r | 0 };
+        const cell = msg.puzzle != null ? { puzzle: msg.puzzle | 0 } : msg.robin != null ? { robin: msg.robin | 0 } : { c: msg.c | 0, r: msg.r | 0 };
         if (!cellOf(g, cell) || g.used[cellKey(cell)]) return 'That one\'s gone.';
         pickCell(g, cell); bump(g); return '';
       }
@@ -1078,13 +1164,78 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         if (!host || (g.phase !== 'read' && g.phase !== 'buzzed')) return 'Not now.';
         g.last = null; closeCell(g); bump(g); return '';
       case 'toBoard':
-        if (!host || (g.phase !== 'answer' && g.phase !== 'robinDone')) return 'Not now.';
+        if (!host || (g.phase !== 'answer' && g.phase !== 'robinDone' && g.phase !== 'puzzleDone')) return 'Not now.';
         backToBoard(g); bump(g); return '';
 
       // ---- round robin
       case 'robinJudge':
         if (!host || g.phase !== 'robin') return 'Not now.';
         robinAdvance(g, !!msg.ok); bump(g); return '';
+
+      // ---- word puzzle: spin, call a consonant, buy a vowel or solve
+      case 'spin': case 'letter': case 'buyVowel': case 'solve': {
+        const Z = g.puzzle;
+        if (g.phase !== 'puzzle' || !Z) return 'Not now.';
+        if (pid !== Z.order[Z.turn]) return 'It\'s not your turn.';
+        const phrase = cellOf(g, g.cell).a;
+        if (msg.t === 'spin') {
+          if (Z.stage !== 'spin') return 'Pick a letter first.';
+          if (!consonantsLeft(g)) return 'No consonants left. Buy a vowel or solve it.';
+          const k = Math.floor(rng() * WHEEL.length);
+          const w = WHEEL[k];
+          Z.spins++; Z.wedge = k;
+          Z.event = { pid, kind: 'spin', wedge: k };
+          if (w === 'BANKRUPT') { Z.banks[pid] = 0; puzzleNext(g); Z.wedge = k; }
+          else if (w === 'LOSE A TURN') { puzzleNext(g); Z.wedge = k; }
+          else Z.stage = 'letter';
+          bump(g); return '';
+        }
+        if (msg.t === 'solve') {
+          if (Z.stage !== 'spin') return 'Pick a letter first.';
+          const text = str(msg.text, 80);
+          if (!letters(text)) return 'Type the whole answer.';
+          if (letters(text) === letters(phrase)) { Z.event = { pid, kind: 'solve', ok: true }; puzzleWin(g, pid); }
+          else { Z.lastSolve = { pid, text }; Z.event = { pid, kind: 'solve', ok: false, text }; puzzleNext(g); }
+          bump(g); return '';
+        }
+        const l = String(msg.l || '').toUpperCase();
+        if (!/^[A-Z]$/.test(l)) return 'Pick a letter.';
+        if (Z.guessed.includes(l)) return 'That letter\'s been called.';
+        const vowel = VOWELS.includes(l);
+        if (msg.t === 'letter') {
+          if (Z.stage !== 'letter') return 'Spin first.';
+          if (vowel) return 'Vowels have to be bought.';
+        } else {
+          if (Z.stage !== 'spin') return 'Pick a consonant first.';
+          if (!vowel) return 'That\'s not a vowel.';
+          if ((Z.banks[pid] || 0) < PUZZLE.vowelCost) return `A vowel costs ${PUZZLE.vowelCost}. Win some points first.`;
+          Z.banks[pid] -= PUZZLE.vowelCost;
+        }
+        Z.guessed.push(l);
+        const count = phrase.split(l).length - 1;
+        const per = vowel ? 0 : WHEEL[Z.wedge];
+        Z.banks[pid] += count * per;
+        Z.event = { pid, kind: vowel ? 'vowel' : 'letter', l, count, won: count * per };
+        if (!count) puzzleNext(g);
+        else { Z.stage = 'spin'; Z.wedge = null; }
+        bump(g); return '';
+      }
+      // Host tools: count a typo'd solve, skip someone who's gone quiet, or give up.
+      case 'puzzleAccept': {
+        const Z = g.puzzle;
+        if (!host || g.phase !== 'puzzle' || !Z || !Z.lastSolve) return 'Not now.';
+        Z.event = { pid: Z.lastSolve.pid, kind: 'solve', ok: true };
+        puzzleWin(g, Z.lastSolve.pid); bump(g); return '';
+      }
+      case 'puzzleSkip':
+        if (!host || g.phase !== 'puzzle') return 'Not now.';
+        g.puzzle.event = { pid: g.puzzle.order[g.puzzle.turn], kind: 'skip' };
+        puzzleNext(g); bump(g); return '';
+      case 'puzzleEnd':
+        if (!host || g.phase !== 'puzzle') return 'Not now.';
+        g.puzzle.result = { winner: null, won: 0 };
+        g.used[cellKey(g.cell)] = true;
+        g.phase = 'puzzleDone'; bump(g); return '';
 
       // ---- final gamble
       case 'toFinal':
@@ -1165,6 +1316,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       board: {
         cats: b.cats.map((c, ci) => ({ name: c.name, tag: c.tag, cells: c.cells.map((x, r) => ({ pts: POINTS[r], used: !!g.used[ci + '-' + r], blank: !x.q })) })),
         robins: b.robins.map((x, k) => ({ used: !!g.used['rr-' + k], blank: !x.q })),
+        puzzles: b.puzzles.map((x, k) => ({ used: !!g.used['pz-' + k], blank: !/[A-Z]/.test(x.a), cat: x.cat })),
       },
       opening: { guesses: g.phase === 'guess' && !host ? (g.opening.guesses[pid] != null ? { [pid]: g.opening.guesses[pid] } : {}) : g.opening.guesses,
         secret: g.phase === 'guess' && !host ? null : g.opening.secret, winner: g.opening.winner, guessed: Object.keys(g.opening.guesses) },
@@ -1172,7 +1324,11 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       robin: g.robin,
       final: null,
     };
-    if (g.cell && cur) {
+    if (g.cell && cur && g.cell.puzzle != null) {
+      const Z = g.puzzle;
+      v.cell = { puzzle: g.cell.puzzle, cat: cur.cat, board: g.phase === 'puzzleDone' ? cur.a : mask(cur.a, Z.guessed), a: host || g.phase === 'puzzleDone' ? cur.a : null };
+      v.puzzle = Object.assign({}, Z, { consonantsLeft: g.phase === 'puzzle' ? consonantsLeft(g) : false });
+    } else if (g.cell && cur) {
       if (g.cell.robin != null) v.cell = { robin: g.cell.robin, q: cur.q, a: host || g.phase === 'robinDone' ? cur.a : null };
       else v.cell = { c: g.cell.c, r: g.cell.r, cat: b.cats[g.cell.c].name, pts: POINTS[g.cell.r], value: cellValue(g), fraud: cur.fraud,
         q: showQ ? cur.q : null, a: host || g.phase === 'answer' ? cur.a : null };
@@ -1197,7 +1353,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     return v;
   }
 
-  const api = { STARTER, LIBRARY, randomBoard, withSpecialties, POINTS, ROBIN_POINTS, LIMITS, cleanBoard, boardStats, createGame, act, viewFor, standings, shuffle, clone };
+  const api = { STARTER, LIBRARY, randomBoard, withSpecialties, POINTS, ROBIN_POINTS, LIMITS, WHEEL, PUZZLE, VOWELS, cleanBoard, boardStats, createGame, act, viewFor, standings, shuffle, clone };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HGS = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1860,6 +2016,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     read: ['Fraud question! Something in this statement is a lie. Correct me.', 'Buzzers ready. Try not to embarrass yourselves.', 'Big swing. I respect it. I don\'t like it, but I respect it.'],
     ruling: ['I\'ll allow it.', 'I will NOT allow it.', 'That is... correct. Ugh.', 'Wrong. Hell has never been prouder.', 'Do not argue with the host. The host has a spreadsheet.'],
     robin: ['Round robin. No buzzers. Name a thing until you can\'t.', 'Tick tock.', 'Is that a real one? ...Fine.'],
+    puzzle: ['Spin the wheel of eternal torment. It\'s just a wheel. Spin it.', 'Bankrupt! My favourite wedge.', 'Buy a vowel. They\'re cheap. Like you.'],
     final: ['Final gamble. Bet what you like. Lose it all if you like.', 'Last place picks the category. Pity is a powerful thing.', 'Write it down. No mumbling. Mumbling is not an answer.'],
   };
 
@@ -2298,6 +2455,8 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         else if (g.cell) { const tag = (g.board.cats[g.cell.c] || {}).tag; splash(`${g.cell.cat}`, `for ${g.cell.pts}${tag ? ' · ' + tag : ''}`, 'cat', 1300); }
       }
       if (g.phase === 'robin') { play('question', 0.5); splash('ROUND ROBIN', g.cell && g.cell.q, 'robin', 2000); }
+      if (g.phase === 'puzzle') { play('gong'); splash('WORD PUZZLE', g.cell && g.cell.cat, 'robin', 1800); }
+      if (g.phase === 'puzzleDone') { const r = g.puzzle && g.puzzle.result; if (r && r.winner) { play('correct'); stage.burst(['#ffd84a', '#ff4b2b', '#7dff6a']); splash(`${name(r.winner)} SOLVED IT!`, `+${num(r.won)}`, 'good', 1800); } else play('wrong'); }
       if (g.phase === 'board' && p.phase === 'guess') { play('ding'); splash(`${name(g.control)} picks first!`, g.opening.secret != null ? `The number was ${g.opening.secret}` : '', 'good', 1800); }
       if (g.phase === 'robinDone') { play('ding'); const r = g.robin && g.robin.result; if (r && r.winner) splash(`${name(r.winner)} wins it!`, `+${H.ROBIN_POINTS.winner}`, 'good'); }
       if ((g.phase === 'finalPick' || g.phase === 'wager') && p.phase === 'board') { play('gong'); stage.set({ mood: 'wide' }); stage.shake(400); splash('FINAL GAMBLE', 'Bet it all. Or don\'t. Coward.', 'fraud', 2000); }
@@ -2322,6 +2481,15 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       splash(g.last.half ? 'HALF!' : g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
       if (!g.last.ok) { S.fallAt[g.last.pid] = stage.now(); setTimeout(() => play('trapdoor', 0.4), 200); stage.set({ mood: 'smirk' }); }
       else stage.set({ mood: 'bored' });
+    }
+    // A new puzzle move: a spin (even one landing where the last did) or a letter.
+    const E = g.puzzle && g.puzzle.event, PZ = p.puzzle || {};
+    if (g.phase === 'puzzle' && E && (JSON.stringify(E) !== JSON.stringify(PZ.event || null) || g.puzzle.spins !== PZ.spins)) {
+      if (E.kind === 'spin') { play('drumroll', 0.4); spinWheel(E.wedge); }
+      else if (E.kind === 'letter' || E.kind === 'vowel') {
+        if (E.count) { for (let i = 0; i < Math.min(E.count, 5); i++) setTimeout(() => play('lock', 0.5), i * 160); }
+        else play('buzzer', 0.5);
+      } else if (E.kind === 'solve' && !E.ok) { play('wrong'); splash('WRONG!', `"${E.text}"`, 'bad', 1300); }
     }
     if (g.robin && p.robin && g.robin.out.length > p.robin.out.length) {
       play('wrong');
@@ -2396,6 +2564,9 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
           else if (R.active[R.turn] === id) { glow = true; mood = 'think'; }
         }
         if (g.phase === 'robinDone' && R && R.result && R.result.winner === id) mood = 'happy';
+        const Z = g.puzzle;
+        if (Z && g.phase === 'puzzle' && Z.order[Z.turn] === id) { glow = true; mood = 'think'; }
+        if (Z && g.phase === 'puzzleDone' && Z.result && Z.result.winner === id) mood = 'happy';
         if (g.phase === 'over') mood = H.standings(g)[0].id === id ? 'happy' : 'idle';
         return { id, color: p.color, look: p.look, connected: p.connected, mood, answered: glow, bet: g.control === id && g.phase === 'board', falling };
       }),
@@ -2558,6 +2729,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
           <li><b>Buzz in</b> to answer. The host stops reading the moment you buzz. Wrong answers <b>cost</b> the points.</li>
           <li><b>Fraud questions</b> are statements with a lie in them. Buzz in and correct it for <b>double points</b>.</li>
           <li><b>Round robins</b>: take turns naming things until you can't. Winner gets 5, second gets 2.</li>
+          <li><b>Word puzzles</b> 🎡: spin the wheel, call consonants for points per letter, buy vowels, and solve to bank it (+3). Bankrupt wipes your round.</li>
           <li><b>Final gamble</b>: last place picks the category, everyone secretly bets (up to their score, or 5 if that's more), then writes an answer.</li>
           <li>The host's rulings are final. Argue anyway.</li>
         </ul>
@@ -2645,8 +2817,8 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   }
   function buildEditor() {
     const d = S.draft;
-    d.cats = d.cats || []; d.robins = d.robins || []; d.finals = d.finals || [];
-    const tabs = d.cats.map((c, k) => ({ k, label: c.name || `Category ${k + 1}` })).concat([{ k: 'rr', label: '🔁 Round robins' }, { k: 'fin', label: '🎲 Final gamble' }]);
+    d.cats = d.cats || []; d.robins = d.robins || []; d.finals = d.finals || []; d.puzzles = d.puzzles || [];
+    const tabs = d.cats.map((c, k) => ({ k, label: c.name || `Category ${k + 1}` })).concat([{ k: 'rr', label: '🔁 Round robins' }, { k: 'pz', label: '🎡 Word puzzles' }, { k: 'fin', label: '🎲 Final gamble' }]);
     if (typeof S.tab === 'number' && S.tab >= d.cats.length) S.tab = d.cats.length ? 0 : 'rr';
     let body = '';
     if (typeof S.tab === 'number') {
@@ -2666,6 +2838,12 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         ${[0, 1, 2, 3].map(k => { const x = d.robins[k] || { q: '', a: '' }; return `<div class="ecell"><b>${k + 1}</b>
           <input data-e="rq" data-r="${k}" maxlength="300" placeholder="Name...  e.g. Name Pokémon" value="${esc(x.q)}">
           <input data-e="ra" data-r="${k}" maxlength="300" placeholder="Notes for you (optional)" value="${esc(x.a)}"></div>`; }).join('')}`;
+    } else if (S.tab === 'pz') {
+      body = `<p class="fine">Wheel of Fortune puzzles. Up to ${H.LIMITS.puzzles}, each a 🎡 tile on the board. Players spin, call consonants, buy vowels and solve.
+          <button class="small" type="button" data-e="pz-random">🎲 Random puzzles</button></p>
+        ${[0, 1, 2].map(k => { const x = d.puzzles[k] || { cat: '', a: '' }; return `<div class="ecell"><b>${k + 1}</b>
+          <input data-e="pc" data-r="${k}" maxlength="30" placeholder="Category, e.g. Movie" value="${esc(x.cat)}">
+          <input data-e="pa" data-r="${k}" maxlength="${H.LIMITS.phrase}" placeholder="The hidden phrase, e.g. HIGHWAY TO HELL" value="${esc(x.a)}"></div>`; }).join('')}`;
     } else {
       body = `<p class="fine">Up to 3. Last place picks one; everyone wagers and writes an answer.
           ${trivia ? `<button class="small" type="button" data-e="gen-finals" ${S.gen ? 'disabled' : ''}>⚡ Fresh finals</button>` : ''}</p>
@@ -2688,7 +2866,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         <button class="small" type="button" data-e="export">Save to file</button>
         <label class="small filebtn">Open file<input type="file" accept=".json,application/json" data-e="import" hidden></label>
       </div>
-      <p class="fine">${st.questions} questions · ${st.robins} round robins · ${st.finals} finals</p>
+      <p class="fine">${st.questions} questions · ${st.robins} round robins · ${st.puzzles} word puzzles · ${st.finals} finals</p>
       <div class="etabs">${tabs.map(t => `<button type="button" class="${t.k === S.tab ? 'on' : ''}" data-e="tab" data-k="${t.k}">${esc(t.label)}</button>`).join('')}
         ${d.cats.length < H.LIMITS.cats ? `<button type="button" data-e="cat-add">+ Blank</button>
           <select data-e="lib-add"><option value="">+ From library (${H.LIBRARY.cats.length})…</option>${H.LIBRARY.cats.map((c, k) => d.cats.some(x => x.name === c.name) ? '' : `<option value="${k}">${esc(c.name)}</option>`).join('')}</select>` : ''}</div>
@@ -2703,6 +2881,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     else if (k === 'q' || k === 'a') c.cells[r][k] = el.value;
     else if (k === 'fraud') c.cells[r].fraud = el.checked;
     else if (k === 'rq' || k === 'ra') { d.robins[r] = d.robins[r] || { q: '', a: '' }; d.robins[r][k === 'rq' ? 'q' : 'a'] = el.value; }
+    else if (k === 'pc' || k === 'pa') { d.puzzles[r] = d.puzzles[r] || { cat: '', a: '' }; d.puzzles[r][k === 'pc' ? 'cat' : 'a'] = k === 'pa' ? el.value.toUpperCase() : el.value; }
     else if (k === 'fc' || k === 'fq' || k === 'fa') { d.finals[r] = d.finals[r] || { cat: '', q: '', a: '' }; d.finals[r]['fc' === k ? 'cat' : k === 'fq' ? 'q' : 'a'] = el.value; }
     else return;
     draftChanged();
@@ -2749,13 +2928,14 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
           return trivia.category(id).then(c => cats.push(c), () => {});
         }), Promise.resolve()).then(() => {
           if (!cats.length) throw new Error('Couldn\'t reach the trivia database. Check your internet and try again.');
-          S.draft = { title: 'Fresh board', cats, robins: H.shuffle(H.LIBRARY.robins, rng).slice(0, 3).map(H.clone), finals: d.finals.length ? d.finals : H.shuffle(H.LIBRARY.finals, rng).slice(0, 3).map(H.clone) };
+          S.draft = { title: 'Fresh board', cats, robins: H.shuffle(H.LIBRARY.robins, rng).slice(0, 3).map(H.clone), puzzles: H.shuffle(H.LIBRARY.puzzles, rng).slice(0, 2).map(H.clone), finals: d.finals.length ? d.finals : H.shuffle(H.LIBRARY.finals, rng).slice(0, 3).map(H.clone) };
           S.tab = 0; draftChanged();
           return trivia.finals(3).then(f => { if (f.length === 3) { S.draft.finals = f; draftChanged(); } }, () => {});
         });
       });
       return;
     }
+    else if (k === 'pz-random') { d.puzzles = H.shuffle(H.LIBRARY.puzzles, rng).slice(0, 2).map(H.clone); draftChanged(); }
     else if (k === 'gen-finals') { generate('Fetching fresh finals…', () => trivia.finals(3).then(f => { if (!f.length) throw new Error('No fresh finals came back. Try again.'); d.finals = f; draftChanged(); })); return; }
     else if (k === 'swap') {
       const c = d.cats[S.tab], r = +b.dataset.r;
@@ -2763,7 +2943,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       return;
     }
     else if (k === 'starter') { if (!confirm('Replace your board with the starter board?')) return; S.draft = H.clone(H.STARTER); S.tab = 0; draftChanged(); }
-    else if (k === 'blank') { if (!confirm('Start a blank board? Your current board will be replaced (save it to a file first if you want to keep it).')) return; S.draft = { title: '', cats: [0, 1, 2, 3].map(() => ({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) })), robins: [], finals: [] }; S.tab = 0; draftChanged(); }
+    else if (k === 'blank') { if (!confirm('Start a blank board? Your current board will be replaced (save it to a file first if you want to keep it).')) return; S.draft = { title: '', cats: [0, 1, 2, 3].map(() => ({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) })), robins: [], finals: [], puzzles: [] }; S.tab = 0; draftChanged(); }
     else if (k === 'export') {
       const blob = new Blob([JSON.stringify(H.cleanBoard(S.draft), null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -2806,6 +2986,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       case 'board': return renderBoard(g, host);
       case 'read': case 'buzzed': case 'answer': return renderQuestion(g, host, playing);
       case 'robin': case 'robinDone': return renderRobin(g, host);
+      case 'puzzle': case 'puzzleDone': return renderPuzzle(g, host);
       case 'finalPick': case 'wager': case 'finalQ': case 'finalReveal': return renderFinal(g, host, playing);
       case 'over': return renderOver(g);
     }
@@ -2834,23 +3015,27 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     const fresh = Object.values(b.cats).every(c => c.cells.every(x => !x.used || x.blank)) && b.robins.every(x => !x.used || x.blank) && g.opening.winner;
     const canPick = mine || host;
     const robins = b.robins.map((x, k) => ({ x, k })).filter(o => !o.x.blank);
+    const puzzles = (b.puzzles || []).map((x, k) => ({ x, k })).filter(o => !o.x.blank);
+    const pzCell = o => (o.x.used ? '<div class="bcell gone"></div>' : `<button class="bcell puzzle" data-act="pick" data-puzzle="${o.k}" ${canPick ? '' : 'disabled'} title="Word puzzle: ${esc(o.x.cat)}">🎡</button>`);
     return `<div class="panel">
       ${fresh && g.opening.secret != null ? `<p class="banner">The number was <b>${g.opening.secret}</b>. ${nm(g, g.opening.winner)} was closest (${g.opening.guesses[g.opening.winner] != null ? g.opening.guesses[g.opening.winner] : 'no guess'}).</p>` : ''}
       <p class="center pickline">${mine ? '<b class="hot">Your pick!</b> Choose a category and a difficulty.' : `<b>${nm(g, g.control)}</b> has control of the board${host ? ' (you can pick for them)' : ''}.`}</p>
-      <div class="board" style="--cols:${b.cats.length + (robins.length ? 1 : 0)}">
+      <div class="board" style="--cols:${b.cats.length + (robins.length ? 1 : 0) + (puzzles.length ? 1 : 0)}">
         ${b.cats.map(c => `<div class="bhead">${esc(c.name || '???')}${c.tag ? `<small>⭐ ${esc(c.tag)}</small>` : ''}</div>`).join('')}
         ${robins.length ? '<div class="bhead robin">Round robin</div>' : ''}
+        ${puzzles.length ? '<div class="bhead puzzle">Word puzzle</div>' : ''}
         ${[0, 1, 2, 3, 4].map(r => b.cats.map((c, ci) => {
           const x = c.cells[r];
           if (x.blank || x.used) return '<div class="bcell gone"></div>';
           return `<button class="bcell" data-act="pick" data-c="${ci}" data-r="${r}" ${canPick ? '' : 'disabled'}>${x.pts}</button>`;
-        }).join('') + (robins.length ? (robins[r] ? (robins[r].x.used ? '<div class="bcell gone"></div>' : `<button class="bcell robin" data-act="pick" data-robin="${robins[r].k}" ${canPick ? '' : 'disabled'}>🔁</button>`) : '<div class="bcell none"></div>') : '')).join('')}
+        }).join('') + (robins.length ? (robins[r] ? (robins[r].x.used ? '<div class="bcell gone"></div>' : `<button class="bcell robin" data-act="pick" data-robin="${robins[r].k}" ${canPick ? '' : 'disabled'}>🔁</button>`) : '<div class="bcell none"></div>') : '') + (puzzles.length ? (puzzles[r] ? pzCell(puzzles[r]) : '<div class="bcell none"></div>') : '')).join('')}
       </div>
       <div class="blist">
         ${b.cats.map((c, ci) => `<div class="brow"><div class="bhead">${esc(c.name || '???')}${c.tag ? `<small>⭐ ${esc(c.tag)}</small>` : ''}</div>${c.cells.map((x, r) => x.blank || x.used
           ? '<div class="bcell gone"></div>'
           : `<button class="bcell" data-act="pick" data-c="${ci}" data-r="${r}" ${canPick ? '' : 'disabled'}>${x.pts}</button>`).join('')}</div>`).join('')}
         ${robins.length ? `<div class="brow"><div class="bhead robin">Round robin</div>${robins.map(o => o.x.used ? '<div class="bcell gone"></div>' : `<button class="bcell robin" data-act="pick" data-robin="${o.k}" ${canPick ? '' : 'disabled'}>🔁</button>`).join('')}</div>` : ''}
+        ${puzzles.length ? `<div class="brow"><div class="bhead puzzle">Word puzzle</div>${puzzles.map(pzCell).join('')}</div>` : ''}
       </div>
     </div>`;
   }
@@ -2913,6 +3098,119 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       ${cur === me.id ? '<p class="buzzed me"><b>YOUR TURN</b><span>Name one out loud!</span></p>' : `<p class="waiting">${nm(g, cur)}'s turn…</p>`}
       ${host ? `${c.a ? `<p class="fine">${esc(c.a)}</p>` : ''}
         <div class="judge"><button class="big good" data-act="robinJudge" data-ok="1">✔ Good one, next</button><button class="big bad" data-act="robinJudge" data-ok="0">✖ ${nm(g, cur)} is out</button></div>` : ''}
+    </div>`;
+  }
+
+  // ---------- word puzzle
+  // Wedge colours go round the wheel; Bankrupt is black, Lose a Turn white.
+  const WEDGE_COLORS = ['#e0281e', '#ffb627', '#2e8a28', '#2e6ae0', '#c88bff', '#ff7a2a'];
+  function wedgeLabel(w) { return w === 'BANKRUPT' ? 'BANKRUPT' : w === 'LOSE A TURN' ? 'LOSE A TURN' : w + (w === 1 ? ' pt' : ' pts'); }
+  function wheelHTML() {
+    const n = H.WHEEL.length, step = 360 / n;
+    const stops = H.WHEEL.map((w, k) => {
+      const c = w === 'BANKRUPT' ? '#111' : w === 'LOSE A TURN' ? '#f2f2f2' : WEDGE_COLORS[k % WEDGE_COLORS.length];
+      return `${c} ${k * step}deg ${(k + 1) * step}deg`;
+    }).join(', ');
+    const labels = H.WHEEL.map((w, k) => `<span style="transform:rotate(${(k + 0.5) * step}deg)" class="${w === 'LOSE A TURN' ? 'dark' : ''}">${w === 'BANKRUPT' ? '💀' : w === 'LOSE A TURN' ? '⏭' : w}</span>`).join('');
+    return `<div class="wheelwrap"><div class="pointer">▼</div><div class="wheel" style="background:conic-gradient(${stops});transform:rotate(${S.wheelRot || 0}deg)">${labels}<i></i></div></div>`;
+  }
+  // The wheel turns in JS so a re-render mid-spin doesn't restart it.
+  const SPIN_MS = 3200;
+  function spinWheel(k) {
+    const step = 360 / H.WHEEL.length;
+    const from = S.wheelRot || 0;
+    // Land wedge k under the pointer at the top, a little off-centre, after 4+ turns.
+    const land = 360 - (k + 0.2 + Math.random() * 0.6) * step;
+    const to = from - (from % 360) + 360 * 4 + land;
+    const A = S.wheelAnim = { from, to, start: performance.now() };
+    const finish = () => { if (S.wheelAnim !== A) return; S.wheelAnim = null; S.wheelRot = to % 360; render(); landed(); };
+    const tick = () => {
+      if (S.wheelAnim !== A) return;
+      const t = Math.min(1, (performance.now() - A.start) / SPIN_MS);
+      S.wheelRot = A.from + (A.to - A.from) * (1 - Math.pow(1 - t, 3));
+      const el = app.querySelector('.wheel');
+      if (el) el.style.transform = `rotate(${S.wheelRot}deg)`;
+      if (t < 1) requestAnimationFrame(tick); else finish();
+    };
+    requestAnimationFrame(tick);
+    // Background tabs get no animation frames; the timer still lands the wheel.
+    setTimeout(finish, SPIN_MS + 60);
+  }
+  function spinning() { return !!S.wheelAnim; }
+  // Sound and a splash once the wheel stops.
+  function landed() {
+    const v = S.view, g = v && v.game, Z = g && g.puzzle;
+    if (!Z || !Z.event || Z.event.kind !== 'spin') return;
+    const w = H.WHEEL[Z.event.wedge], who = g.names[Z.event.pid] || '?';
+    if (w === 'BANKRUPT') { play('trapdoor'); setTimeout(() => play('loser'), 300); stage.shake(500); stage.set({ mood: 'smirk' }); splash('BANKRUPT!', `${who} loses their round bank`, 'bad', 1500); }
+    else if (w === 'LOSE A TURN') { play('buzzer'); splash('LOSE A TURN', who, 'bad', 1200); }
+    else { play('ding', 0.5); splash(`${w} ${w === 1 ? 'POINT' : 'POINTS'}`, `per letter · ${who} calls a consonant`, 'cat', 1100); }
+  }
+  function letterBoard(text) {
+    // Only letters revealed in the last moment flip, not every letter on every update.
+    if (S.pzBoard !== text) {
+      const prev = S.pzBoard && S.pzBoard.length === text.length ? S.pzBoard : null;
+      S.pzNew = new Set(prev ? [...text].map((ch, i) => (prev[i] === '_' && ch !== '_' ? i : -1)).filter(i => i >= 0) : []);
+      S.pzNewAt = performance.now(); S.pzBoard = text;
+    }
+    const fresh = performance.now() - S.pzNewAt < 600;
+    let pos = 0; // index into text, skipping the spaces between words
+    const tile = ch => {
+      const i = pos++;
+      if (!/[A-Z_]/.test(ch)) return `<b class="punct">${esc(ch)}</b>`;
+      return `<b class="${ch === '_' ? 'hid' : fresh && S.pzNew.has(i) ? 'show' : ''}">${ch === '_' ? '' : ch}</b>`;
+    };
+    // Words stay whole; long phrases wrap between words.
+    return `<div class="pzboard">${text.split(' ').map(word => { const w = [...word].map(tile).join(''); pos++; return `<span class="pzword">${w}</span>`; }).join('')}</div>`;
+  }
+  function renderPuzzle(g, host) {
+    const Z = g.puzzle, c = g.cell;
+    if (!Z || !c) return '';
+    const cur = Z.order[Z.turn];
+    const head = `<div class="qhead"><span>Word puzzle · ${esc(c.cat || 'Phrase')}</span><span>Vowels cost ${H.PUZZLE.vowelCost} · solving adds +${H.PUZZLE.solveBonus}</span></div>`;
+    const banks = `<ol class="turns banks">${Z.order.map(id => `<li class="${id === cur && g.phase === 'puzzle' ? 'now' : ''}">${nm(g, id)} <b>${num(Z.banks[id] || 0)}</b></li>`).join('')}</ol>`;
+    if (g.phase === 'puzzleDone') {
+      const r = Z.result || {};
+      return `<div class="panel center">${head}${letterBoard(c.board)}
+        <p class="result ${r.winner ? 'good' : 'bad'}">${r.winner ? `${nm(g, r.winner)} solved it! +${num(r.won)}` : 'Nobody solved it.'}</p>
+        ${host ? '<button class="big fire" data-act="toBoard">Back to the board ▶</button>' : ''}</div>`;
+    }
+    const used = l => Z.guessed.includes(l);
+    const keys = (set, act, on) => `<div class="keys">${[...set].map(l => `<button type="button" class="key" data-act="${act}" data-l="${l}" ${on && !used(l) ? '' : 'disabled'}>${l}</button>`).join('')}</div>`;
+    const CONS = 'BCDFGHJKLMNPQRSTVWXYZ';
+    const wedge = Z.wedge != null ? H.WHEEL[Z.wedge] : null;
+    const E = Z.event;
+    let news = '';
+    if (E && !spinning()) {
+      const who = nm(g, E.pid);
+      if (E.kind === 'letter' || E.kind === 'vowel') news = E.count ? `${who} called <b>${E.l}</b>: ${E.count} of them${E.won ? ` (+${E.won})` : ''}.` : `${who} called <b>${E.l}</b>. None!`;
+      else if (E.kind === 'solve' && !E.ok) news = `${who} guessed "${esc(E.text)}". Wrong!`;
+      else if (E.kind === 'skip') news = `${who}'s turn was skipped.`;
+      else if (E.kind === 'spin' && (wedge == null || typeof H.WHEEL[E.wedge] !== 'number')) news = `${who} hit <b>${wedgeLabel(H.WHEEL[E.wedge])}</b>.`;
+    }
+    let controls = '';
+    if (cur === me.id) {
+      if (spinning()) controls = '<p class="waiting">Spinning…</p>';
+      else if (Z.stage === 'letter') controls = `<p class="buzzed me"><b>${wedgeLabel(wedge)} per letter</b><span>Call a consonant</span></p>${keys(CONS, 'letter', true)}`;
+      else {
+        const bank = Z.banks[me.id] || 0;
+        controls = `<p class="buzzed me"><b>YOUR TURN</b><span>Spin, buy a vowel, or solve</span></p>
+          <div class="pzacts"><button class="big fire" data-act="spin" ${Z.consonantsLeft ? '' : 'disabled'}>🎡 Spin${Z.consonantsLeft ? '' : ' (no consonants left)'}</button></div>
+          <p class="fine">Buy a vowel for ${H.PUZZLE.vowelCost} (you have ${num(bank)}):</p>${keys(H.VOWELS, 'buyVowel', bank >= H.PUZZLE.vowelCost)}
+          <form class="rowform" data-act="solveForm"><input name="text" maxlength="80" data-keep="solve" placeholder="Solve the puzzle" autocomplete="off" required><button class="big">Solve</button></form>`;
+      }
+    } else {
+      controls = `<p class="waiting">${spinning() ? `${nm(g, cur)} is spinning…` : Z.stage === 'letter' ? `${nm(g, cur)} is calling a consonant for ${wedgeLabel(wedge)}…` : `${nm(g, cur)}'s turn…`}</p>`;
+    }
+    return `<div class="panel center puzzlepanel">${head}
+      ${letterBoard(c.board)}
+      ${host ? `<div class="reveal host"><span>Answer (just you)</span><b>${esc(c.a)}</b></div>` : ''}
+      <p class="fine called">Called: ${Z.guessed.length ? Z.guessed.join(' ') : 'nothing yet'}</p>
+      <div class="pzrow">${wheelHTML()}<div class="pzside">${banks}${news ? `<p class="news">${news}</p>` : ''}${controls}</div></div>
+      ${host ? `<div class="deskrow">
+        ${Z.lastSolve ? `<button class="small" data-act="puzzleAccept">✔ Count ${nm(g, Z.lastSolve.pid)}'s "${esc(Z.lastSolve.text)}" as right</button>` : ''}
+        <button class="small" data-act="puzzleSkip">⏭ Skip ${nm(g, cur)}'s turn</button>
+        <button class="small" data-act="puzzleEnd">Nobody gets it: reveal</button></div>` : ''}
     </div>`;
   }
 
@@ -2982,6 +3280,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       case 'read': case 'buzzed': return ['read', 'ruling'];
       case 'answer': return ['ruling'];
       case 'robin': case 'robinDone': return ['robin', 'ruling'];
+      case 'puzzle': case 'puzzleDone': return ['puzzle', 'ruling'];
       default: return ['final', 'ruling'];
     }
   }
@@ -3074,7 +3373,11 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       case 'start': send({ t: 'start' }); break;
       case 'toLobby': send({ t: 'lobby' }); break;
       case 'buzz': buzz(); break;
-      case 'pick': send(b.dataset.robin != null ? { t: 'pick', robin: +b.dataset.robin } : { t: 'pick', c: +b.dataset.c, r: +b.dataset.r }); break;
+      case 'pick': send(b.dataset.puzzle != null ? { t: 'pick', puzzle: +b.dataset.puzzle } : b.dataset.robin != null ? { t: 'pick', robin: +b.dataset.robin } : { t: 'pick', c: +b.dataset.c, r: +b.dataset.r }); break;
+      case 'spin': if (!spinning()) send({ t: 'spin' }); break;
+      case 'letter': case 'buyVowel': send({ t: act, l: b.dataset.l }); break;
+      case 'puzzleAccept': case 'puzzleSkip': send({ t: act }); break;
+      case 'puzzleEnd': if (confirm('End the puzzle with no winner?')) send({ t: 'puzzleEnd' }); break;
       case 'judge': send({ t: 'judge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
       case 'robinJudge': send({ t: 'robinJudge', ok: b.dataset.ok === '1' }); break;
       case 'finalJudge': send({ t: 'finalJudge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
@@ -3104,6 +3407,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     if (act === 'guessForm') send({ t: 'guess', n: +f.n.value });
     if (act === 'wagerForm') send({ t: 'wager', n: +f.n.value });
     if (act === 'finalForm') send({ t: 'finalAnswer', text: f.text.value });
+    if (act === 'solveForm') send({ t: 'solve', text: f.text.value });
     if (act === 'sayForm' && f.say.value.trim()) send({ t: 'say', text: f.say.value.trim() });
     const input = f.querySelector('input');
     if (input) { input.value = ''; input.blur(); }
