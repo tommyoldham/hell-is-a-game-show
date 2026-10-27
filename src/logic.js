@@ -260,9 +260,12 @@
         if (!host || g.phase !== 'buzzed') return 'Not now.';
         const v = cellValue(g);
         const who = g.buzz;
-        g.scores[who] += msg.ok ? v : -v;
-        g.last = { pid: who, ok: !!msg.ok, delta: msg.ok ? v : -v };
-        if (msg.ok) { g.control = who; closeCell(g); }
+        // Half right: half the points and control, and the question is done.
+        const half = !!msg.half;
+        const delta = half ? v / 2 : msg.ok ? v : -v;
+        g.scores[who] += delta;
+        g.last = { pid: who, ok: !!msg.ok || half, half, delta };
+        if (msg.ok || half) { g.control = who; closeCell(g); }
         else {
           g.lockedOut.push(who);
           g.buzz = null; g.buzzes = [];
@@ -326,8 +329,9 @@
         const next = g.final.order.find(p => !(p in g.final.results));
         if (!next) return 'Everyone\'s been revealed.';
         const w = g.final.wagers[next] || 0;
-        g.final.results[next] = !!msg.ok;
-        g.scores[next] += msg.ok ? w : -w;
+        // Results are true, false or 'half' (half the wager won).
+        g.final.results[next] = msg.half ? 'half' : !!msg.ok;
+        g.scores[next] += msg.half ? w / 2 : msg.ok ? w : -w;
         if (g.final.order.every(p => p in g.final.results)) g.phase = 'over';
         bump(g); return '';
       }

@@ -92,19 +92,75 @@
     const ch = k => Math.max(0, Math.min(255, Math.round(((n >> k) & 255) * f)));
     return '#' + [16, 8, 0].map(k => ch(k).toString(16).padStart(2, '0')).join('');
   }
-  // mood: 'idle' | 'happy' | 'sad' | 'think'
-  function soul(color, mood, wiggle) {
-    const s = grid(16, 18);
-    oval(s, 8, 7, 6.5, 6.5, color);
-    rect(s, 2, 7, 13, 7, color);
-    for (let x = 2; x < 15; x++) if (((x + wiggle) >> 1) % 2 === 0) set(s, x, 14, color);
-    oval(s, 6, 4, 2, 1.5, shade(color, 1.35));
-    rect(s, 11, 7, 3, 6, shade(color, 0.75));
-    const ink = '#1a0508';
-    if (mood === 'happy') { set(s, 5, 7, ink); set(s, 6, 6, ink); set(s, 7, 7, ink); set(s, 9, 7, ink); set(s, 10, 6, ink); set(s, 11, 7, ink); rect(s, 6, 10, 5, 1, ink); set(s, 5, 9, ink); set(s, 11, 9, ink); }
-    else if (mood === 'sad') { rect(s, 5, 7, 2, 2, ink); rect(s, 10, 7, 2, 2, ink); rect(s, 6, 11, 5, 1, ink); set(s, 5, 12, ink); set(s, 11, 12, ink); set(s, 4, 9, '#7fd4ff'); }
-    else if (mood === 'think') { rect(s, 5, 7, 2, 2, ink); rect(s, 10, 6, 2, 2, ink); rect(s, 7, 11, 3, 1, ink); }
-    else { rect(s, 5, 7, 2, 2, ink); rect(s, 10, 7, 2, 2, ink); rect(s, 7, 11, 3, 1, ink); }
+  // Avatar creator options. Index 0 of each is the default look.
+  const LOOKS = {
+    hat: ['None', 'Horns', 'Halo', 'Top hat', 'Party hat', 'Crown', 'Cap', 'Bow', 'Antenna'],
+    eyes: ['Dots', 'Big', 'Sleepy', 'Angry', 'Cyclops', 'Shades', 'Specs'],
+    face: ['None', 'Moustache', 'Fangs', 'Blush', 'Bow tie', 'Tongue', 'Stitches'],
+  };
+  function cleanLook(l) {
+    l = l && typeof l === 'object' ? l : {};
+    const o = {};
+    for (const k of Object.keys(LOOKS)) { const n = l[k] | 0; o[k] = n >= 0 && n < LOOKS[k].length ? n : 0; }
+    return o;
+  }
+
+  // mood: 'idle' | 'happy' | 'sad' | 'think'. The sprite is 18x25: the 16x18
+  // soul body sits at (1, 7), leaving room above for hats.
+  const SOUL_W = 18, SOUL_H = 25;
+  function soul(color, mood, wiggle, look) {
+    look = cleanLook(look);
+    const s = grid(SOUL_W, SOUL_H);
+    const P = (x, y, c) => set(s, x + 1, y + 7, c);
+    const R = (x, y, w, h, c) => rect(s, x + 1, y + 7, w, h, c);
+    const O = (x, y, rx, ry, c) => oval(s, x + 1, y + 7, rx, ry, c);
+    const ink = '#1a0508', white = '#fff8e8', gold = '#ffd84a';
+    O(8, 7, 6.5, 6.5, color);
+    R(2, 7, 13, 7, color);
+    for (let x = 2; x < 15; x++) if (((x + wiggle) >> 1) % 2 === 0) P(x, 14, color);
+    O(6, 4, 2, 1.5, shade(color, 1.35));
+    R(11, 7, 3, 6, shade(color, 0.75));
+
+    // Eyes. Happy and sad moods take over the face, except a cyclops stays one-eyed.
+    const eyes = LOOKS.eyes[look.eyes];
+    if (eyes === 'Cyclops') {
+      if (mood === 'happy') { P(6, 8, ink); P(7, 7, ink); P(8, 7, ink); P(9, 7, ink); P(10, 8, ink); }
+      else { R(6, 6, 4, 4, white); R(7, 7, 2, 2, ink); if (mood === 'sad') R(6, 6, 4, 1, color); }
+    } else if (mood === 'happy') { P(5, 7, ink); P(6, 6, ink); P(7, 7, ink); P(9, 7, ink); P(10, 6, ink); P(11, 7, ink); }
+    else if (mood === 'sad') { R(5, 7, 2, 2, ink); R(10, 7, 2, 2, ink); P(4, 9, '#7fd4ff'); }
+    else if (eyes === 'Big') { R(4, 6, 3, 3, white); R(10, 6, 3, 3, white); R(5, 7, 2, 2, ink); R(11, 7, 2, 2, ink); }
+    else if (eyes === 'Sleepy') { R(5, 8, 2, 1, ink); R(10, 8, 2, 1, ink); R(5, 7, 2, 1, shade(color, 0.6)); R(10, 7, 2, 1, shade(color, 0.6)); }
+    else if (eyes === 'Angry') { R(5, 7, 2, 2, ink); R(10, 7, 2, 2, ink); P(4, 5, ink); P(5, 6, ink); P(6, 6, ink); P(12, 5, ink); P(11, 6, ink); P(10, 6, ink); }
+    else if (mood === 'think') { R(5, 7, 2, 2, ink); R(10, 6, 2, 2, ink); }
+    else { R(5, 7, 2, 2, ink); R(10, 7, 2, 2, ink); }
+    if (eyes === 'Shades') { R(3, 6, 5, 3, ink); R(9, 6, 5, 3, ink); R(7, 7, 3, 1, ink); P(4, 7, '#5a6a8a'); P(10, 7, '#5a6a8a'); }
+    if (eyes === 'Specs') { for (const x of [4, 9]) { R(x, 6, 4, 1, ink); R(x, 9, 4, 1, ink); R(x, 6, 1, 4, ink); R(x + 3, 6, 1, 4, ink); } R(8, 7, 1, 1, ink); }
+
+    // Mouth.
+    if (mood === 'happy') { R(6, 10, 5, 1, ink); P(5, 9, ink); P(11, 9, ink); }
+    else if (mood === 'sad') { R(6, 11, 5, 1, ink); P(5, 12, ink); P(11, 12, ink); }
+    else R(7, 11, 3, 1, ink);
+
+    // Face extras.
+    const face = LOOKS.face[look.face];
+    if (face === 'Moustache') { R(5, 10, 3, 1, ink); R(9, 10, 3, 1, ink); P(4, 11, ink); P(12, 11, ink); P(8, 10, ink); }
+    else if (face === 'Fangs') { P(7, 12, white); P(9, 12, white); }
+    else if (face === 'Blush') { R(3, 9, 2, 1, '#ff7aa8'); R(12, 9, 2, 1, '#ff7aa8'); }
+    else if (face === 'Bow tie') { R(5, 14, 2, 3, '#e0281e'); R(10, 14, 2, 3, '#e0281e'); R(7, 15, 3, 1, '#a81c1c'); }
+    else if (face === 'Tongue') { R(8, 12, 2, 2, '#ff5a7a'); }
+    else if (face === 'Stitches') { R(2, 3, 1, 5, ink); P(1, 4, ink); P(3, 4, ink); P(1, 6, ink); P(3, 6, ink); }
+
+    // Hats sit on the head (body rows start at y = 0.5).
+    const hat = LOOKS.hat[look.hat];
+    const red = '#e0281e';
+    if (hat === 'Horns') { P(3, 1, red); P(3, 0, red); P(2, -1, red); P(4, 1, red); P(13, 1, red); P(13, 0, red); P(14, -1, red); P(12, 1, red); }
+    else if (hat === 'Halo') { R(5, -4, 7, 1, gold); R(5, -2, 7, 1, gold); P(4, -3, gold); P(12, -3, gold); }
+    else if (hat === 'Top hat') { R(5, -6, 7, 6, '#26222e'); R(5, -2, 7, 1, red); R(3, 0, 11, 1, '#26222e'); }
+    else if (hat === 'Party hat') { for (let j = 0; j < 6; j++) R(8 - (j >> 1), -5 + j, 1 + (j >> 1) * 2, 1, j % 2 ? '#5ad1ff' : '#ff7ad9'); P(8, -6, gold); }
+    else if (hat === 'Crown') { R(4, -2, 9, 3, gold); P(4, -3, gold); P(8, -3, gold); P(12, -3, gold); P(4, -4, gold); P(8, -4, gold); P(12, -4, gold); P(8, -1, red); }
+    else if (hat === 'Cap') { O(8, 1, 6, 2.5, '#2e6ae0'); R(2, 1, 13, 1, '#2e6ae0'); R(10, 2, 6, 1, '#1d48a0'); }
+    else if (hat === 'Bow') { R(11, -1, 2, 3, '#ff5a9a'); R(14, -1, 2, 3, '#ff5a9a'); R(13, 0, 1, 1, '#c0306a'); }
+    else if (hat === 'Antenna') { R(8, -4, 1, 5, ink); R(7, -6, 3, 2, '#7dff6a'); }
     return toCanvas(outline(s, ink));
   }
 
@@ -122,7 +178,7 @@
       wide: demon({ eyes: 'wide', mouth: 'open' }),
     };
     const soulCache = {};
-    const soulImg = (color, mood, w) => soulCache[color + mood + w] || (soulCache[color + mood + w] = soul(color, mood, w));
+    const soulImg = (color, mood, w, look) => { const k = color + mood + w + JSON.stringify(cleanLook(look)); return soulCache[k] || (soulCache[k] = soul(color, mood, w, look)); };
     const embers = Array.from({ length: 26 }, () => ({ x: Math.random() * W, y: H - Math.random() * 60, v: 6 + Math.random() * 10 }));
     let scene = { players: [], talkingUntil: 0, mood: 'bored', shakeUntil: 0, flash: null };
     let last = performance.now();
@@ -221,7 +277,7 @@
         if (p.bet) { // soul bet aura
           for (let a = 0; a < 6; a++) { g.fillStyle = a % 2 ? '#ff7a2a' : '#ffd84a'; g.fillRect(x - 9 + ((t / 60 + a * 5) % 18), y - 2 + ((a * 7) % 6), 2, 2); }
         }
-        g.drawImage(soulImg(p.color, p.mood || 'idle', Math.floor(t / 200) % 4), x - 8, y);
+        g.drawImage(soulImg(p.color, p.mood || 'idle', Math.floor(t / 200) % 4, p.look), x - 9, y - 7);
         if (p.connected === false) { g.fillStyle = 'rgba(18,6,10,.65)'; g.fillRect(x - 9, y - 1, 18, 20); }
       });
       if (!ps.length) { g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(150, 100, 140, 2); }
@@ -409,5 +465,5 @@
     }, 150);
   }
 
-  window.HGSArt = { Stage, drawFlag, playTune, stopTune, drumroll, audio, music, soul, demon, podiumXs, W, H };
+  window.HGSArt = { Stage, LOOKS, cleanLook, drawFlag, playTune, stopTune, drumroll, audio, music, soul, demon, podiumXs, W, H };
 })();

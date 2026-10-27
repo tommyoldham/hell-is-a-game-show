@@ -135,6 +135,13 @@ input:focus, select:focus { outline: 3px solid var(--fire); outline-offset: 0; b
 
 /* ------------------------------------------------------------ board editor */
 .etools { display: flex; flex-wrap: wrap; gap: 6px; }
+.egen { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; padding: 8px; border: 2px dashed var(--gold); border-radius: 6px; }
+.egen select { max-width: 220px; }
+.egen .busy { color: var(--gold); animation: genblink 1s steps(2) infinite; }
+@keyframes genblink { 50% { opacity: .4; } }
+.ecell .swap { display: block; margin: 6px auto 0; padding: 2px 4px; font-size: 14px; background: none; border: 1px solid var(--muted); border-radius: 4px; cursor: pointer; }
+.ecell .swap:disabled { opacity: .4; cursor: default; }
+.credit a { color: inherit; }
 .filebtn { cursor: pointer; display: inline-block; }
 .etabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; }
 .etabs button { background: var(--panel2); border: 3px solid var(--line); border-bottom: 0; padding: 6px 10px; font-size: 19px; }
@@ -295,7 +302,8 @@ textarea:focus { outline: 3px solid var(--fire); border-color: var(--ink); }
 }
 .buzzer:not(:disabled):active { transform: translateY(8px); box-shadow: 0 2px 0 #5a0d08, 0 0 0 6px #3a0a10; }
 .buzzer:disabled { background: radial-gradient(circle at 35% 30%, #6a5050, #3a2228 60%); box-shadow: 0 10px 0 #1a0a0f, 0 0 0 6px #2a0f17; color: var(--muted); font-size: clamp(14px, 3.5vw, 18px); opacity: 1; }
-.judge { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.judge { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; margin: 10px 0; }
+.big.half { background: #b9761a; color: #fff; }
 .big.good { background: #2e8a28; color: #fff; }
 .big.bad { background: #a81c1c; color: #fff; }
 .deskrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -356,6 +364,14 @@ textarea:focus { outline: 3px solid var(--fire); border-color: var(--ink); }
   .bubble { top: 6%; left: 25%; max-width: 50%; padding: 4px 6px; }
   .bigcode { font-size: 32px; }
 }
+
+/* avatar creator */
+.avrow { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
+canvas.avatar { width: 90px; height: 125px; image-rendering: pixelated; background: radial-gradient(circle at 50% 60%, #4b1520, #1a0a0f 70%); border: 3px solid var(--ink); border-radius: 6px; flex: none; }
+.avopts { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.avopt { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+.avopt span { text-align: center; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.avopt i { font-style: normal; color: var(--muted); }
 
 </style>
 </head>
@@ -1040,9 +1056,12 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         if (!host || g.phase !== 'buzzed') return 'Not now.';
         const v = cellValue(g);
         const who = g.buzz;
-        g.scores[who] += msg.ok ? v : -v;
-        g.last = { pid: who, ok: !!msg.ok, delta: msg.ok ? v : -v };
-        if (msg.ok) { g.control = who; closeCell(g); }
+        // Half right: half the points and control, and the question is done.
+        const half = !!msg.half;
+        const delta = half ? v / 2 : msg.ok ? v : -v;
+        g.scores[who] += delta;
+        g.last = { pid: who, ok: !!msg.ok || half, half, delta };
+        if (msg.ok || half) { g.control = who; closeCell(g); }
         else {
           g.lockedOut.push(who);
           g.buzz = null; g.buzzes = [];
@@ -1106,8 +1125,9 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         const next = g.final.order.find(p => !(p in g.final.results));
         if (!next) return 'Everyone\'s been revealed.';
         const w = g.final.wagers[next] || 0;
-        g.final.results[next] = !!msg.ok;
-        g.scores[next] += msg.ok ? w : -w;
+        // Results are true, false or 'half' (half the wager won).
+        g.final.results[next] = msg.half ? 'half' : !!msg.ok;
+        g.scores[next] += msg.half ? w / 2 : msg.ok ? w : -w;
         if (g.final.order.every(p => p in g.final.results)) g.phase = 'over';
         bump(g); return '';
       }
@@ -1180,6 +1200,164 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   const api = { STARTER, LIBRARY, randomBoard, withSpecialties, POINTS, ROBIN_POINTS, LIMITS, cleanBoard, boardStats, createGame, act, viewFor, standings, shuffle, clone };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HGS = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Fresh questions from the free Open Trivia Database (opentdb.com, CC BY-SA 4.0).
+// Kirby's brief: simple, not obscure, and never the same question twice. So:
+// - easy questions first, medium only to fill a gap, never hard;
+// - an OpenTDB session token, which never serves the same question twice while
+//   it lives (it expires after 6 hours unused);
+// - our own "seen" list in localStorage, which covers games days apart;
+// - spares from each fetch go in a pool, so swapping one question is instant.
+// OpenTDB allows one request per 5 seconds per address, so calls are queued.
+(function (root) {
+  'use strict';
+
+  const API = 'https://opentdb.com/';
+  const GAP_MS = 5200;
+  const SEEN_MAX = 6000;
+
+  const CATS = [
+    [9, 'General Knowledge'], [11, 'Film'], [14, 'Television'], [12, 'Music'], [15, 'Video Games'],
+    [17, 'Science & Nature'], [22, 'Geography'], [23, 'History'], [21, 'Sport'], [27, 'Animals'],
+    [32, 'Cartoons'], [31, 'Anime & Manga'], [29, 'Comics'], [10, 'Books'], [20, 'Mythology'],
+    [26, 'Celebrities'], [18, 'Computers'], [30, 'Gadgets'], [28, 'Vehicles'], [16, 'Board Games'],
+    [25, 'Art'], [19, 'Maths'], [13, 'Musicals & Theatre'], [24, 'Politics'],
+  ].map(([id, name]) => ({ id, name }));
+
+  function decode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+  function key(q) { return q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  // Long or multi-part answers ("Kaltag, Nikki, and Star") are the obscure ones.
+  function simple(c) { return c.a.length <= 30 && !/, /.test(c.a) && c.q.length <= 200; }
+
+  // One OpenTDB result -> one board cell. Multiple-choice questions that only
+  // make sense with their options ("Which of these...") get the options added.
+  function toCell(r, rng) {
+    const q = decode(r.question).trim(), a = decode(r.correct_answer).trim();
+    if (r.type === 'boolean') return { q: 'True or false: ' + q, a, fraud: false, diff: r.difficulty };
+    let text = q;
+    if (/\b(which|what) of (these|the following)\b|\bfollowing\b|\bnot\b/i.test(q)) {
+      const opts = [a].concat((r.incorrect_answers || []).map(decode));
+      for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
+      text += ' (' + opts.slice(0, -1).join(', ') + ' or ' + opts[opts.length - 1] + ')';
+    }
+    return { q: text, a, fraud: false, diff: r.difficulty };
+  }
+
+  // Easiest first; true/false (a coin flip) before open questions; then shorter
+  // questions first. So 1 point is the gimme.
+  function rank(cells) {
+    const d = { easy: 0, medium: 1, hard: 2 };
+    const tf = c => (/^True or false: /.test(c.q) ? 0 : 1);
+    return cells.slice().sort((x, y) => (d[x.diff] - d[y.diff]) || (tf(x) - tf(y)) || (x.q.length - y.q.length));
+  }
+
+  function Client(opts) {
+    const store = (opts && opts.store) || null;
+    const rng = (opts && opts.rng) || Math.random;
+    const get = k => { try { return JSON.parse(store.getItem('hgs:' + k)); } catch (e) { return null; } };
+    const put = (k, v) => { try { store.setItem('hgs:' + k, JSON.stringify(v)); } catch (e) {} };
+    let seen = new Set(get('seen') || []);
+    const pools = get('pools') || {};
+    let token = get('otdbToken');
+    let nextAt = 0;
+    let chain = Promise.resolve();
+
+    function markSeen(cells) {
+      cells.forEach(c => seen.add(key(c.q)));
+      const arr = Array.from(seen);
+      if (arr.length > SEEN_MAX) seen = new Set(arr.slice(-SEEN_MAX));
+      put('seen', Array.from(seen));
+    }
+
+    // Requests run one at a time, at least GAP_MS apart.
+    function call(path) {
+      const run = () => new Promise(res => setTimeout(res, Math.max(0, nextAt - Date.now())))
+        .then(() => { nextAt = Date.now() + GAP_MS; return fetch(API + path); })
+        .then(r => (r.status === 429 ? { response_code: 5 } : r.json())); // 429 = too fast
+      const p = chain.then(run, run);
+      chain = p.catch(() => {});
+      return p;
+    }
+    function freshToken(tries = 0) {
+      return call('api_token.php?command=request').then(j => {
+        if (!j.token) { if (tries < 3) return freshToken(tries + 1); throw new Error('The trivia database is busy. Try again in a minute.'); }
+        token = j.token; put('otdbToken', token); return token;
+      });
+    }
+    // Returns raw results; [] when OpenTDB has nothing (left) for that query.
+    function query(params, retried, waits = 0) {
+      const go = () => call('api.php?encode=url3986&token=' + token + '&' + params).then(j => {
+        if (j.response_code === 0) return j.results;
+        if (j.response_code === 3 && !retried) { token = null; return query(params, true, waits); } // token expired
+        if (j.response_code === 5 && waits < 4) { nextAt = Date.now() + GAP_MS; return query(params, retried, waits + 1); } // too fast
+        return []; // 1: not enough questions, 4: token has used them all
+      });
+      return token ? go() : freshToken().then(go);
+    }
+
+    // Fills a category's pool with unseen questions, easy first, then medium.
+    function fill(id, want) {
+      const pool = pools[id] = pools[id] || [];
+      const take = list => list.map(r => toCell(r, rng)).filter(c => simple(c) && !seen.has(key(c.q)) && !pool.some(p => key(p.q) === key(c.q)));
+      const step = (diffs, amount) => {
+        if (pool.length >= want || !diffs.length) return Promise.resolve();
+        return query(`amount=${amount}&category=${id}&difficulty=${diffs[0]}`).then(rs => {
+          const got = take(rs);
+          pool.push(...got);
+          // OpenTDB answers "not enough" to big asks; a smaller ask may still work.
+          if (pool.length >= want) return;
+          if (!rs.length && amount > 5) return step(diffs, 5);
+          return step(diffs.slice(1), amount);
+        });
+      };
+      return step(['easy', 'medium'], 10).then(() => { put('pools', pools); return pool; });
+    }
+    function draw(id, n) {
+      const pool = pools[id] || [];
+      const out = pool.splice(0, n);
+      markSeen(out);
+      put('pools', pools);
+      return out;
+    }
+
+    return {
+      CATS,
+      // A full category: 5 questions, worth 1-5 by difficulty.
+      category(id) {
+        const cat = CATS.find(c => c.id === id) || CATS[0];
+        return fill(id, 5).then(() => {
+          const cells = rank(draw(id, 5)).map(({ q, a }) => ({ q, a, fraud: false }));
+          if (cells.length < 5) throw new Error(`Ran out of fresh ${cat.name} questions. Try another category.`);
+          return { name: cat.name, src: id, cells };
+        });
+      },
+      // One replacement question from the same category.
+      one(id) {
+        return fill(id, 1).then(() => {
+          const [c] = draw(id, 1);
+          if (!c) throw new Error('No fresh questions left in that category.');
+          return { q: c.q, a: c.a, fraud: false };
+        });
+      },
+      // Easy multiple-choice questions with short answers make fair final gambles.
+      finals(n) {
+        return query(`amount=${n * 4}&difficulty=easy&type=multiple`).then(rs => {
+          const out = rs.map(r => ({ cat: decode(r.category).replace(/^(Entertainment|Science): /, ''), ...toCell(r, rng) }))
+            .filter(c => simple(c) && !seen.has(key(c.q)) && c.a.length <= 24).slice(0, n);
+          markSeen(out);
+          return out.map(({ cat, q, a }) => ({ cat, q, a }));
+        });
+      },
+      seenCount: () => seen.size,
+    };
+  }
+
+  const api = { Client, CATS, toCell, rank, decode, simple };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.HGS_TRIVIA = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1278,19 +1456,75 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     const ch = k => Math.max(0, Math.min(255, Math.round(((n >> k) & 255) * f)));
     return '#' + [16, 8, 0].map(k => ch(k).toString(16).padStart(2, '0')).join('');
   }
-  // mood: 'idle' | 'happy' | 'sad' | 'think'
-  function soul(color, mood, wiggle) {
-    const s = grid(16, 18);
-    oval(s, 8, 7, 6.5, 6.5, color);
-    rect(s, 2, 7, 13, 7, color);
-    for (let x = 2; x < 15; x++) if (((x + wiggle) >> 1) % 2 === 0) set(s, x, 14, color);
-    oval(s, 6, 4, 2, 1.5, shade(color, 1.35));
-    rect(s, 11, 7, 3, 6, shade(color, 0.75));
-    const ink = '#1a0508';
-    if (mood === 'happy') { set(s, 5, 7, ink); set(s, 6, 6, ink); set(s, 7, 7, ink); set(s, 9, 7, ink); set(s, 10, 6, ink); set(s, 11, 7, ink); rect(s, 6, 10, 5, 1, ink); set(s, 5, 9, ink); set(s, 11, 9, ink); }
-    else if (mood === 'sad') { rect(s, 5, 7, 2, 2, ink); rect(s, 10, 7, 2, 2, ink); rect(s, 6, 11, 5, 1, ink); set(s, 5, 12, ink); set(s, 11, 12, ink); set(s, 4, 9, '#7fd4ff'); }
-    else if (mood === 'think') { rect(s, 5, 7, 2, 2, ink); rect(s, 10, 6, 2, 2, ink); rect(s, 7, 11, 3, 1, ink); }
-    else { rect(s, 5, 7, 2, 2, ink); rect(s, 10, 7, 2, 2, ink); rect(s, 7, 11, 3, 1, ink); }
+  // Avatar creator options. Index 0 of each is the default look.
+  const LOOKS = {
+    hat: ['None', 'Horns', 'Halo', 'Top hat', 'Party hat', 'Crown', 'Cap', 'Bow', 'Antenna'],
+    eyes: ['Dots', 'Big', 'Sleepy', 'Angry', 'Cyclops', 'Shades', 'Specs'],
+    face: ['None', 'Moustache', 'Fangs', 'Blush', 'Bow tie', 'Tongue', 'Stitches'],
+  };
+  function cleanLook(l) {
+    l = l && typeof l === 'object' ? l : {};
+    const o = {};
+    for (const k of Object.keys(LOOKS)) { const n = l[k] | 0; o[k] = n >= 0 && n < LOOKS[k].length ? n : 0; }
+    return o;
+  }
+
+  // mood: 'idle' | 'happy' | 'sad' | 'think'. The sprite is 18x25: the 16x18
+  // soul body sits at (1, 7), leaving room above for hats.
+  const SOUL_W = 18, SOUL_H = 25;
+  function soul(color, mood, wiggle, look) {
+    look = cleanLook(look);
+    const s = grid(SOUL_W, SOUL_H);
+    const P = (x, y, c) => set(s, x + 1, y + 7, c);
+    const R = (x, y, w, h, c) => rect(s, x + 1, y + 7, w, h, c);
+    const O = (x, y, rx, ry, c) => oval(s, x + 1, y + 7, rx, ry, c);
+    const ink = '#1a0508', white = '#fff8e8', gold = '#ffd84a';
+    O(8, 7, 6.5, 6.5, color);
+    R(2, 7, 13, 7, color);
+    for (let x = 2; x < 15; x++) if (((x + wiggle) >> 1) % 2 === 0) P(x, 14, color);
+    O(6, 4, 2, 1.5, shade(color, 1.35));
+    R(11, 7, 3, 6, shade(color, 0.75));
+
+    // Eyes. Happy and sad moods take over the face, except a cyclops stays one-eyed.
+    const eyes = LOOKS.eyes[look.eyes];
+    if (eyes === 'Cyclops') {
+      if (mood === 'happy') { P(6, 8, ink); P(7, 7, ink); P(8, 7, ink); P(9, 7, ink); P(10, 8, ink); }
+      else { R(6, 6, 4, 4, white); R(7, 7, 2, 2, ink); if (mood === 'sad') R(6, 6, 4, 1, color); }
+    } else if (mood === 'happy') { P(5, 7, ink); P(6, 6, ink); P(7, 7, ink); P(9, 7, ink); P(10, 6, ink); P(11, 7, ink); }
+    else if (mood === 'sad') { R(5, 7, 2, 2, ink); R(10, 7, 2, 2, ink); P(4, 9, '#7fd4ff'); }
+    else if (eyes === 'Big') { R(4, 6, 3, 3, white); R(10, 6, 3, 3, white); R(5, 7, 2, 2, ink); R(11, 7, 2, 2, ink); }
+    else if (eyes === 'Sleepy') { R(5, 8, 2, 1, ink); R(10, 8, 2, 1, ink); R(5, 7, 2, 1, shade(color, 0.6)); R(10, 7, 2, 1, shade(color, 0.6)); }
+    else if (eyes === 'Angry') { R(5, 7, 2, 2, ink); R(10, 7, 2, 2, ink); P(4, 5, ink); P(5, 6, ink); P(6, 6, ink); P(12, 5, ink); P(11, 6, ink); P(10, 6, ink); }
+    else if (mood === 'think') { R(5, 7, 2, 2, ink); R(10, 6, 2, 2, ink); }
+    else { R(5, 7, 2, 2, ink); R(10, 7, 2, 2, ink); }
+    if (eyes === 'Shades') { R(3, 6, 5, 3, ink); R(9, 6, 5, 3, ink); R(7, 7, 3, 1, ink); P(4, 7, '#5a6a8a'); P(10, 7, '#5a6a8a'); }
+    if (eyes === 'Specs') { for (const x of [4, 9]) { R(x, 6, 4, 1, ink); R(x, 9, 4, 1, ink); R(x, 6, 1, 4, ink); R(x + 3, 6, 1, 4, ink); } R(8, 7, 1, 1, ink); }
+
+    // Mouth.
+    if (mood === 'happy') { R(6, 10, 5, 1, ink); P(5, 9, ink); P(11, 9, ink); }
+    else if (mood === 'sad') { R(6, 11, 5, 1, ink); P(5, 12, ink); P(11, 12, ink); }
+    else R(7, 11, 3, 1, ink);
+
+    // Face extras.
+    const face = LOOKS.face[look.face];
+    if (face === 'Moustache') { R(5, 10, 3, 1, ink); R(9, 10, 3, 1, ink); P(4, 11, ink); P(12, 11, ink); P(8, 10, ink); }
+    else if (face === 'Fangs') { P(7, 12, white); P(9, 12, white); }
+    else if (face === 'Blush') { R(3, 9, 2, 1, '#ff7aa8'); R(12, 9, 2, 1, '#ff7aa8'); }
+    else if (face === 'Bow tie') { R(5, 14, 2, 3, '#e0281e'); R(10, 14, 2, 3, '#e0281e'); R(7, 15, 3, 1, '#a81c1c'); }
+    else if (face === 'Tongue') { R(8, 12, 2, 2, '#ff5a7a'); }
+    else if (face === 'Stitches') { R(2, 3, 1, 5, ink); P(1, 4, ink); P(3, 4, ink); P(1, 6, ink); P(3, 6, ink); }
+
+    // Hats sit on the head (body rows start at y = 0.5).
+    const hat = LOOKS.hat[look.hat];
+    const red = '#e0281e';
+    if (hat === 'Horns') { P(3, 1, red); P(3, 0, red); P(2, -1, red); P(4, 1, red); P(13, 1, red); P(13, 0, red); P(14, -1, red); P(12, 1, red); }
+    else if (hat === 'Halo') { R(5, -4, 7, 1, gold); R(5, -2, 7, 1, gold); P(4, -3, gold); P(12, -3, gold); }
+    else if (hat === 'Top hat') { R(5, -6, 7, 6, '#26222e'); R(5, -2, 7, 1, red); R(3, 0, 11, 1, '#26222e'); }
+    else if (hat === 'Party hat') { for (let j = 0; j < 6; j++) R(8 - (j >> 1), -5 + j, 1 + (j >> 1) * 2, 1, j % 2 ? '#5ad1ff' : '#ff7ad9'); P(8, -6, gold); }
+    else if (hat === 'Crown') { R(4, -2, 9, 3, gold); P(4, -3, gold); P(8, -3, gold); P(12, -3, gold); P(4, -4, gold); P(8, -4, gold); P(12, -4, gold); P(8, -1, red); }
+    else if (hat === 'Cap') { O(8, 1, 6, 2.5, '#2e6ae0'); R(2, 1, 13, 1, '#2e6ae0'); R(10, 2, 6, 1, '#1d48a0'); }
+    else if (hat === 'Bow') { R(11, -1, 2, 3, '#ff5a9a'); R(14, -1, 2, 3, '#ff5a9a'); R(13, 0, 1, 1, '#c0306a'); }
+    else if (hat === 'Antenna') { R(8, -4, 1, 5, ink); R(7, -6, 3, 2, '#7dff6a'); }
     return toCanvas(outline(s, ink));
   }
 
@@ -1308,7 +1542,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       wide: demon({ eyes: 'wide', mouth: 'open' }),
     };
     const soulCache = {};
-    const soulImg = (color, mood, w) => soulCache[color + mood + w] || (soulCache[color + mood + w] = soul(color, mood, w));
+    const soulImg = (color, mood, w, look) => { const k = color + mood + w + JSON.stringify(cleanLook(look)); return soulCache[k] || (soulCache[k] = soul(color, mood, w, look)); };
     const embers = Array.from({ length: 26 }, () => ({ x: Math.random() * W, y: H - Math.random() * 60, v: 6 + Math.random() * 10 }));
     let scene = { players: [], talkingUntil: 0, mood: 'bored', shakeUntil: 0, flash: null };
     let last = performance.now();
@@ -1407,7 +1641,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         if (p.bet) { // soul bet aura
           for (let a = 0; a < 6; a++) { g.fillStyle = a % 2 ? '#ff7a2a' : '#ffd84a'; g.fillRect(x - 9 + ((t / 60 + a * 5) % 18), y - 2 + ((a * 7) % 6), 2, 2); }
         }
-        g.drawImage(soulImg(p.color, p.mood || 'idle', Math.floor(t / 200) % 4), x - 8, y);
+        g.drawImage(soulImg(p.color, p.mood || 'idle', Math.floor(t / 200) % 4, p.look), x - 9, y - 7);
         if (p.connected === false) { g.fillStyle = 'rgba(18,6,10,.65)'; g.fillRect(x - 9, y - 1, 18, 20); }
       });
       if (!ps.length) { g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(150, 100, 140, 2); }
@@ -1595,7 +1829,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     }, 150);
   }
 
-  window.HGSArt = { Stage, drawFlag, playTune, stopTune, drumroll, audio, music, soul, demon, podiumXs, W, H };
+  window.HGSArt = { Stage, LOOKS, cleanLook, drawFlag, playTune, stopTune, drumroll, audio, music, soul, demon, podiumXs, W, H };
 })();
 
 </script>
@@ -1645,12 +1879,16 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   function rng() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function cleanName(n) { return String(n || '').replace(/\s+/g, ' ').trim().slice(0, 16) || 'Lost Soul'; }
-  function pts(n) { return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n); }
+  // Half points show as ½ (2.5 -> 2½).
+  function num(n) { const a = Math.abs(n), w = Math.floor(a); return (n < 0 ? '−' : '') + (a - w ? (w || '') + '½' : w); }
+  function pts(n) { return (n > 0 ? '+' : '') + num(n); }
 
+  function randomLook() { const o = {}; for (const k in A.LOOKS) o[k] = Math.floor(rng() * A.LOOKS[k].length); return o; }
   const me = {
     id: session.get('pid') || rid(),
     name: local.get('name', ''),
     color: local.get('color', COLORS[Math.floor(rng() * COLORS.length)]),
+    look: A.cleanLook(local.get('look', null) || randomLook()),
   };
   session.set('pid', me.id);
 
@@ -1810,7 +2048,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     if (!p) p = room.players.find(p => !p.connected && p.name.toLowerCase() === name.toLowerCase() && p.id !== room.ownerId);
     if (!p) {
       if (room.players.length >= MAX_PLAYERS) return null;
-      p = { id: String(msg.pid || rid()).slice(0, 20), name, color: COLORS.includes(msg.color) ? msg.color : COLORS[0], connected: true, spec: H.LIBRARY.cats.some(c => c.name === msg.spec) ? msg.spec : '' };
+      p = { id: String(msg.pid || rid()).slice(0, 20), name, color: COLORS.includes(msg.color) ? msg.color : COLORS[0], look: A.cleanLook(msg.look), connected: true, spec: H.LIBRARY.cats.some(c => c.name === msg.spec) ? msg.spec : '' };
       if (room.players.some(o => o.color === p.color)) p.color = COLORS.find(col => !room.players.some(o => o.color === col)) || p.color;
       room.players.push(p);
       toast(room.game ? `${name} is watching` : `${name} joined`);
@@ -1819,6 +2057,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       if (!p.connected) { toast(`${p.name} is back`); play('pop'); }
       p.connected = true;
       if (name) p.name = name;
+      if (msg.look) p.look = A.cleanLook(msg.look);
       if (!room.game && msg.spec !== undefined) p.spec = H.LIBRARY.cats.some(c => c.name === msg.spec) ? msg.spec : '';
     }
     return p.id;
@@ -1902,7 +2141,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         clearTimeout(net.connectTimer);
         net.hostConn = conn;
         lastHost = Date.now();
-        conn.send({ t: 'hello', pid: me.id, name: me.name, color: me.color, spec: S.spec });
+        conn.send({ t: 'hello', pid: me.id, name: me.name, color: me.color, look: me.look, spec: S.spec });
       });
       conn.on('data', msg => { lastHost = Date.now(); onGuestData(msg); });
       conn.on('close', () => {
@@ -1952,6 +2191,13 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         room.showHostId = msg.pid;
         room.board = null; // the new host brings their own board
         break;
+      case 'setLook': {
+        const p = room.players.find(p => p.id === pid);
+        if (!p) return;
+        p.look = A.cleanLook(msg.look);
+        if (COLORS.includes(msg.color) && !room.players.some(o => o !== p && o.color === msg.color)) p.color = msg.color;
+        break;
+      }
       case 'setSpec': {
         const p = room.players.find(p => p.id === pid);
         if (!p || g) return;
@@ -2073,7 +2319,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     }
     if (g.last && JSON.stringify(g.last) !== JSON.stringify(p.last) && g.seq !== p.seq) {
       play(g.last.ok ? 'correct' : 'wrong');
-      splash(g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
+      splash(g.last.half ? 'HALF!' : g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
       if (!g.last.ok) { S.fallAt[g.last.pid] = stage.now(); setTimeout(() => play('trapdoor', 0.4), 200); stage.set({ mood: 'smirk' }); }
       else stage.set({ mood: 'bored' });
     }
@@ -2090,7 +2336,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         const ok = g.final.results[pid];
         play(ok ? 'correct' : 'wrong');
         const w = g.final.wagers[pid] || 0;
-        if (g.phase !== 'over') splash(ok ? 'CORRECT!' : 'WRONG!', `${name(pid)} ${pts(ok ? w : -w)}`, ok ? 'good' : 'bad', 1300);
+        if (g.phase !== 'over') splash(ok === 'half' ? 'HALF!' : ok ? 'CORRECT!' : 'WRONG!', `${name(pid)} ${pts(ok === 'half' ? w / 2 : ok ? w : -w)}`, ok ? 'good' : 'bad', 1300);
       }
     }
   }
@@ -2104,7 +2350,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     const pct = x => (x / A.W * 100).toFixed(2) + '%';
     const html = (hostName ? `<div class="plate host" style="left:${pct(56)};width:${pct(76)}"><span>😈 ${esc(hostName)}</span><b>HOST</b></div>` : '') +
       entries.map((e, k) => `<div class="plate ${e.me ? 'me' : ''} ${e.connected === false ? 'gone' : ''}" style="left:${pct(xs[k])};width:${pct(gap - 2)};--c:${e.color}">
-        <span>${esc(e.name)}</span>${e.score != null ? `<b>${e.score}</b>` : ''}</div>`).join('');
+        <span>${esc(e.name)}</span>${e.score != null ? `<b>${num(e.score)}</b>` : ''}</div>`).join('');
     if (layer.dataset.html !== html) { layer.innerHTML = html; layer.dataset.html = html; }
     // Floating "+3" / "−2" when a score changes.
     const floats = stageNode.querySelector('.floats');
@@ -2131,7 +2377,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     if (!g) {
       // Lobby: everyone who isn't hosting stands at a podium.
       const ps = v.players.filter(p => p.id !== v.showHostId);
-      stage.set({ players: ps.map(p => ({ id: p.id, color: p.color, connected: p.connected, mood: 'idle' })) });
+      stage.set({ players: ps.map(p => ({ id: p.id, color: p.color, look: p.look, connected: p.connected, mood: 'idle' })) });
       syncPlates(ps.map(p => ({ id: p.id, name: p.name, color: p.color, connected: p.connected, me: p.id === me.id })), hostP && hostP.name);
       return;
     }
@@ -2151,7 +2397,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         }
         if (g.phase === 'robinDone' && R && R.result && R.result.winner === id) mood = 'happy';
         if (g.phase === 'over') mood = H.standings(g)[0].id === id ? 'happy' : 'idle';
-        return { id, color: p.color, connected: p.connected, mood, answered: glow, bet: g.control === id && g.phase === 'board', falling };
+        return { id, color: p.color, look: p.look, connected: p.connected, mood, answered: glow, bet: g.control === id && g.phase === 'board', falling };
       }),
     });
   }
@@ -2177,6 +2423,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     app.innerHTML = html;
     const ss = app.querySelector('#stageSlot');
     if (ss) ss.replaceWith(stageNode);
+    drawAvatars();
     const es = app.querySelector('#editorSlot');
     if (es) { if (!editor.firstChild) buildEditor(); es.replaceWith(editor); }
     if (focus && editor.isConnected) { focus.focus(); if (sel) safe(() => focus.setSelectionRange(sel[0], sel[1])); }
@@ -2226,9 +2473,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       <div class="card">
         <label class="field"><span>Your name</span>
           <input id="name" maxlength="16" placeholder="Lost Soul" value="${esc(me.name)}" autocomplete="off"></label>
-        <div class="field"><span>Your soul colour</span>
-          <div class="swatches">${COLORS.map(c => `<button class="swatch ${c === me.color ? 'on' : ''}" style="--c:${c}" data-act="color" data-c="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
-        </div>
+        ${avatarMaker()}
         <button class="big fire" data-act="create">🔥 Open a new show</button>
         <div class="or">or join a friend's show</div>
         <div class="joinrow">
@@ -2252,9 +2497,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         <input type="hidden" id="code" value="${esc(S.joinCode)}">
         <label class="field"><span>Your name</span>
           <input id="name" maxlength="16" placeholder="Lost Soul" value="${esc(me.name)}" autocomplete="off" autofocus></label>
-        <div class="field"><span>Your soul colour</span>
-          <div class="swatches">${COLORS.map(c => `<button class="swatch ${c === me.color ? 'on' : ''}" style="--c:${c}" data-act="color" data-c="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
-        </div>
+        ${avatarMaker()}
         <button class="big fire" data-act="join">🔥 Join the show</button>
         <button class="link" data-act="noInvite">or open my own show instead</button>
       </div>
@@ -2297,6 +2540,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
         <label class="check"><input type="checkbox" data-act="useSpecs" ${v.useSpecs !== false ? 'checked' : ''} ${owner ? '' : 'disabled'}>
           Put everyone's specialty on the board <span class="fine">(each contestant picks a category they'll crush)</span></label>
       </div>
+      ${!host ? `<div class="card"><h2>👻 Your soul</h2>${avatarMaker()}</div>` : ''}
       ${!host && v.useSpecs !== false ? renderSpecPicker(v) : ''}
       ${host ? `<div class="card">
           <h2>Your board</h2>
@@ -2327,6 +2571,33 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   }
 
   // ---------- specialty picker (contestants)
+  // ---------- avatar creator
+  const LOOK_LABELS = { hat: 'Hat', eyes: 'Eyes', face: 'Extra' };
+  function avatarMaker() {
+    return `<div class="field avatar"><span>Your soul</span>
+      <div class="avrow"><canvas class="avatar" width="18" height="25" aria-label="your soul"></canvas>
+        <div class="avopts">${Object.keys(A.LOOKS).map(k => `<div class="avopt">
+          <button type="button" class="small" data-act="look" data-k="${k}" data-d="-1" aria-label="previous ${LOOK_LABELS[k]}">◀</button>
+          <span><i>${LOOK_LABELS[k]}</i> ${esc(A.LOOKS[k][me.look[k]])}</span>
+          <button type="button" class="small" data-act="look" data-k="${k}" data-d="1" aria-label="next ${LOOK_LABELS[k]}">▶</button></div>`).join('')}
+          <button type="button" class="small" data-act="lookRandom">🎲 Surprise me</button></div></div>
+      <div class="swatches">${COLORS.map(c => `<button type="button" class="swatch ${c === me.color ? 'on' : ''}" style="--c:${c}" data-act="color" data-c="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
+    </div>`;
+  }
+  function drawAvatars() {
+    app.querySelectorAll('canvas.avatar').forEach(c => {
+      const x = c.getContext('2d');
+      x.clearRect(0, 0, c.width, c.height);
+      x.drawImage(A.soul(me.color, 'idle', 0, me.look), 0, 0);
+    });
+  }
+  // Saved in this browser; in a room, the change shows on your podium at once.
+  function lookChanged() {
+    local.set('color', me.color); local.set('look', me.look);
+    if (S.screen === 'lobby') send({ t: 'setLook', look: me.look, color: me.color });
+    render();
+  }
+
   function renderSpecPicker(v) {
     const mine = (v.players.find(p => p.id === me.id) || {}).spec || '';
     const groups = {};
@@ -2348,6 +2619,25 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
 
   // ---------- board editor (host only; lives in their browser)
   let saveTimer = null;
+  const trivia = window.HGS_TRIVIA ? HGS_TRIVIA.Client({ store: safe(() => localStorage), rng }) : null;
+  // Fetching fresh questions takes a few seconds per category (OpenTDB's rate
+  // limit), so the editor shows progress and blocks other generate buttons.
+  function generate(label, job) {
+    if (S.gen) return;
+    S.gen = label; buildEditor();
+    Promise.resolve().then(job)
+      .catch(e => toast(e && e.message && !/fetch|network/i.test(e.message) ? e.message : 'Couldn\'t reach the trivia database. Check your internet and try again.', 'bad'))
+      .then(() => { S.gen = null; buildEditor(); });
+  }
+  // Library categories this browser has used least come first, so random
+  // boards don't keep serving the same questions.
+  function libPick(n) {
+    const used = local.get('libUsed', {});
+    const out = H.shuffle(H.LIBRARY.cats, rng).sort((a, b) => (used[a.name] || 0) - (used[b.name] || 0)).slice(0, n);
+    out.forEach(c => { used[c.name] = (used[c.name] || 0) + 1; });
+    local.set('libUsed', used);
+    return H.clone(out);
+  }
   function draftChanged() {
     local.set('board', S.draft);
     clearTimeout(saveTimer);
@@ -2364,8 +2654,9 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       c.cells = c.cells || [];
       body = `<div class="erow"><input data-e="cat-name" value="${esc(c.name)}" maxlength="30" placeholder="Category name, e.g. Horror movies">
           <button class="small" type="button" data-e="cat-del">Delete</button></div>
+        ${c.src ? `<p class="fine">Fresh from the trivia database. 🔄 swaps one question for a new one.</p>` : ''}
         ${H.POINTS.map((p, r) => { const x = c.cells[r] || (c.cells[r] = { q: '', a: '', fraud: false }); return `
-        <div class="ecell"><b>${p}</b>
+        <div class="ecell"><b>${p}${c.src ? `<button type="button" class="swap" data-e="swap" data-r="${r}" title="Swap for a new question" ${S.gen ? 'disabled' : ''}>🔄</button>` : ''}</b>
           <textarea data-e="q" data-r="${r}" rows="2" maxlength="300" placeholder="${p}-point question${p === 1 ? ' (easy)' : p === 5 ? ' (hard)' : ''}">${esc(x.q)}</textarea>
           <input data-e="a" data-r="${r}" maxlength="300" placeholder="Answer (only you see this)" value="${esc(x.a)}">
           <label class="check"><input type="checkbox" data-e="fraud" data-r="${r}" ${x.fraud ? 'checked' : ''}> Fraud statement (double points)</label>
@@ -2376,7 +2667,8 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
           <input data-e="rq" data-r="${k}" maxlength="300" placeholder="Name...  e.g. Name Pokémon" value="${esc(x.q)}">
           <input data-e="ra" data-r="${k}" maxlength="300" placeholder="Notes for you (optional)" value="${esc(x.a)}"></div>`; }).join('')}`;
     } else {
-      body = `<p class="fine">Up to 3. Last place picks one; everyone wagers and writes an answer.</p>
+      body = `<p class="fine">Up to 3. Last place picks one; everyone wagers and writes an answer.
+          ${trivia ? `<button class="small" type="button" data-e="gen-finals" ${S.gen ? 'disabled' : ''}>⚡ Fresh finals</button>` : ''}</p>
         ${[0, 1, 2].map(k => { const x = d.finals[k] || { cat: '', q: '', a: '' }; return `<div class="ecell"><b>${k + 1}</b>
           <input data-e="fc" data-r="${k}" maxlength="30" placeholder="Category, e.g. Video game movies" value="${esc(x.cat)}">
           <textarea data-e="fq" data-r="${k}" rows="2" maxlength="300" placeholder="The final question">${esc(x.q)}</textarea>
@@ -2384,8 +2676,13 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     }
     const st = H.boardStats(H.cleanBoard(d));
     editor.innerHTML = `
+      ${trivia ? `<div class="egen">
+        <button class="small fire" type="button" data-e="gen-board" ${S.gen ? 'disabled' : ''}>⚡ Fresh board</button>
+        <select data-e="gen-add" ${S.gen || d.cats.length >= H.LIMITS.cats ? 'disabled' : ''}><option value="">⚡ + Fresh category…</option>${trivia.CATS.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+        <span class="fine">${S.gen ? `<b class="busy">${esc(S.gen)}</b>` : 'Simple questions from the Open Trivia Database, never repeated.'}</span>
+      </div>` : ''}
       <div class="etools">
-        <button class="small fire" type="button" data-e="random">🎲 Random board</button>
+        <button class="small" type="button" data-e="random">🎲 Random from library</button>
         <button class="small" type="button" data-e="starter">Load starter board</button>
         <button class="small" type="button" data-e="blank">New blank board</button>
         <button class="small" type="button" data-e="export">Save to file</button>
@@ -2395,7 +2692,8 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       <div class="etabs">${tabs.map(t => `<button type="button" class="${t.k === S.tab ? 'on' : ''}" data-e="tab" data-k="${t.k}">${esc(t.label)}</button>`).join('')}
         ${d.cats.length < H.LIMITS.cats ? `<button type="button" data-e="cat-add">+ Blank</button>
           <select data-e="lib-add"><option value="">+ From library (${H.LIBRARY.cats.length})…</option>${H.LIBRARY.cats.map((c, k) => d.cats.some(x => x.name === c.name) ? '' : `<option value="${k}">${esc(c.name)}</option>`).join('')}</select>` : ''}</div>
-      <div class="ebody">${body}</div>`;
+      <div class="ebody">${body}</div>
+      ${trivia ? '<p class="fine credit">Fresh questions: <a href="https://opentdb.com" target="_blank" rel="noopener">Open Trivia Database</a>, CC BY-SA 4.0.</p>' : ''}`;
   }
   editor.addEventListener('input', e => {
     const el = e.target, k = el.dataset.e, r = +el.dataset.r, d = S.draft;
@@ -2410,6 +2708,13 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     draftChanged();
   });
   editor.addEventListener('change', e => {
+    if (e.target.dataset.e === 'gen-add' && e.target.value !== '') {
+      const id = +e.target.value, name = (trivia.CATS.find(c => c.id === id) || {}).name;
+      generate(`Fetching ${name}…`, () => trivia.category(id).then(c => {
+        S.draft.cats.push(c); S.tab = S.draft.cats.length - 1; draftChanged();
+      }));
+      return;
+    }
     if (e.target.dataset.e === 'lib-add' && e.target.value !== '') {
       S.draft.cats.push(H.clone(H.LIBRARY.cats[+e.target.value]));
       S.tab = S.draft.cats.length - 1;
@@ -2432,7 +2737,31 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     if (k === 'tab') S.tab = /^\d+$/.test(b.dataset.k) ? +b.dataset.k : b.dataset.k;
     else if (k === 'cat-add') { d.cats.push({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) }); S.tab = d.cats.length - 1; draftChanged(); }
     else if (k === 'cat-del') { if (!confirm('Delete this category and its questions?')) return; d.cats.splice(S.tab, 1); S.tab = 0; draftChanged(); }
-    else if (k === 'random') { if (!confirm('Replace your board with 6 random categories from the library?')) return; S.draft = H.randomBoard(rng); S.tab = 0; draftChanged(); }
+    else if (k === 'random') { if (!confirm('Replace your board with 6 random categories from the library?')) return; S.draft = Object.assign(H.randomBoard(rng), { cats: libPick(6) }); S.tab = 0; draftChanged(); }
+    else if (k === 'gen-board') {
+      if (!confirm('Replace your board with 6 categories of fresh questions? It takes about half a minute.')) return;
+      // A broad, easy mix: General Knowledge plus five others, picked at random.
+      const ids = [9].concat(H.shuffle(trivia.CATS.slice(1, 13).map(c => c.id), rng).slice(0, 5));
+      generate('Fetching fresh questions…', () => {
+        const cats = [];
+        return ids.reduce((p, id, n) => p.then(() => {
+          S.gen = `Fetching category ${n + 1} of ${ids.length}…`; buildEditor();
+          return trivia.category(id).then(c => cats.push(c), () => {});
+        }), Promise.resolve()).then(() => {
+          if (!cats.length) throw new Error('Couldn\'t reach the trivia database. Check your internet and try again.');
+          S.draft = { title: 'Fresh board', cats, robins: H.shuffle(H.LIBRARY.robins, rng).slice(0, 3).map(H.clone), finals: d.finals.length ? d.finals : H.shuffle(H.LIBRARY.finals, rng).slice(0, 3).map(H.clone) };
+          S.tab = 0; draftChanged();
+          return trivia.finals(3).then(f => { if (f.length === 3) { S.draft.finals = f; draftChanged(); } }, () => {});
+        });
+      });
+      return;
+    }
+    else if (k === 'gen-finals') { generate('Fetching fresh finals…', () => trivia.finals(3).then(f => { if (!f.length) throw new Error('No fresh finals came back. Try again.'); d.finals = f; draftChanged(); })); return; }
+    else if (k === 'swap') {
+      const c = d.cats[S.tab], r = +b.dataset.r;
+      generate('Swapping question…', () => trivia.one(c.src).then(x => { c.cells[r] = x; draftChanged(); }));
+      return;
+    }
     else if (k === 'starter') { if (!confirm('Replace your board with the starter board?')) return; S.draft = H.clone(H.STARTER); S.tab = 0; draftChanged(); }
     else if (k === 'blank') { if (!confirm('Start a blank board? Your current board will be replaced (save it to a file first if you want to keep it).')) return; S.draft = { title: '', cats: [0, 1, 2, 3].map(() => ({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) })), robins: [], finals: [] }; S.tab = 0; draftChanged(); }
     else if (k === 'export') {
@@ -2458,7 +2787,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       <div class="topbar">
         ${logo(true)}
         <div class="meta">
-          ${playing ? `<span class="money">${g.scores[me.id]} pts</span>` : host ? '<span class="pill">😈 You are the host</span>' : '<span class="pill dim">Watching</span>'}
+          ${playing ? `<span class="money">${num(g.scores[me.id])} pts</span>` : host ? '<span class="pill">😈 You are the host</span>' : '<span class="pill dim">Watching</span>'}
           ${soundBtn()}
         </div>
       </div>
@@ -2541,14 +2870,14 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       const L = g.last;
       main = `${c.q ? `<h2 class="question">${esc(c.q)}</h2>` : ''}
         <div class="reveal"><span>Answer</span><b>${esc(c.a)}</b></div>
-        <p class="center result ${L && L.ok ? 'good' : 'bad'}">${L && L.ok ? `${nm(g, L.pid)} got it! ${pts(L.delta)}` : 'Nobody got it.'}</p>
+        <p class="center result ${L && L.ok ? 'good' : 'bad'}">${L && L.ok ? `${nm(g, L.pid)} ${L.half ? 'half got it' : 'got it'}! ${pts(L.delta)}` : 'Nobody got it.'}</p>
         ${host ? '<button class="big fire" data-act="toBoard">Back to the board ▶</button>' : ''}`;
     } else if (host) {
       main = `<h2 class="question">${esc(c.q)}</h2>
         <div class="reveal host"><span>Answer (just you)</span><b>${esc(c.a)}</b></div>
         ${g.phase === 'buzzed'
           ? `<div class="buzzed"><b>${nm(g, g.buzz)}</b> buzzed in!</div>${buzzList(g)}
-             <div class="judge"><button class="big good" data-act="judge" data-ok="1">✔ Correct ${pts(c.value)}</button><button class="big bad" data-act="judge" data-ok="0">✖ Wrong ${pts(-c.value)}</button></div>`
+             <div class="judge"><button class="big good" data-act="judge" data-ok="1">✔ Correct ${pts(c.value)}</button><button class="big half" data-act="judge" data-half="1">½ Half ${pts(c.value / 2)}</button><button class="big bad" data-act="judge" data-ok="0">✖ Wrong ${pts(-c.value)}</button></div>`
           : `<p class="center waiting">Read it out loud. Buzzers are live.${g.lockedOut.length ? ` (Locked out: ${g.lockedOut.map(id => nm(g, id)).join(', ')})` : ''}</p>`}
         <div class="deskrow"><button class="small" data-act="resetBuzz">↺ Reset buzzers</button><button class="small" data-act="skip">Nobody gets it: show the answer</button></div>`;
     } else {
@@ -2618,10 +2947,10 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
           const done = id in F.results;
           const shown = done || host || id === me.id;
           return `<li class="${done ? (F.results[id] ? 'good' : 'bad') : ''} ${id === next ? 'now' : ''}">${nm(g, id)}: ${shown ? `<b>${esc(F.answers[id])}</b>` : '???'}
-            <span class="fine">bet ${done || host || id === me.id ? F.wagers[id] : '?'}</span>${done ? (F.results[id] ? ` ✔ ${pts(F.wagers[id])}` : ` ✖ ${pts(-F.wagers[id])}`) : ''}</li>`;
+            <span class="fine">bet ${done || host || id === me.id ? F.wagers[id] : '?'}</span>${done ? (F.results[id] === 'half' ? ` ½ ${pts(F.wagers[id] / 2)}` : F.results[id] ? ` ✔ ${pts(F.wagers[id])}` : ` ✖ ${pts(-F.wagers[id])}`) : ''}</li>`;
         }).join('')}</ul>
         ${host && next ? `<div class="reveal host"><span>Answer (just you)</span><b>${esc(F.a)}</b></div>
-          <p>Rule on <b>${nm(g, next)}</b>:</p><div class="judge"><button class="big good" data-act="finalJudge" data-ok="1">✔ Correct</button><button class="big bad" data-act="finalJudge" data-ok="0">✖ Wrong</button></div>` : ''}`;
+          <p>Rule on <b>${nm(g, next)}</b>:</p><div class="judge"><button class="big good" data-act="finalJudge" data-ok="1">✔ Correct</button><button class="big half" data-act="finalJudge" data-half="1">½ Half</button><button class="big bad" data-act="finalJudge" data-ok="0">✖ Wrong</button></div>` : ''}`;
     }
     return `<div class="panel center finalpanel"><h1 class="glow">🎲 Final gamble</h1>${body}</div>`;
   }
@@ -2633,7 +2962,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     const canLobby = v.ownerId === me.id || amHost(g);
     return `<div class="panel center"><h1 class="glow">${top.length > 1 ? `A tie! ${top.map(x => esc(x.name)).join(' & ')}` : `${esc(s[0].name)} wins!`}</h1>
       ${g.final && g.final.a ? `<p class="fine">Final answer: ${esc(g.final.a)}</p>` : ''}
-      <ol class="standings">${s.map((x, k) => { const p = v.players.find(p => p.id === x.id) || {}; return `<li class="${x.id === me.id ? 'me' : ''}"><span class="rank">${k + 1}</span><i style="--c:${p.color}"></i><span class="nm">${esc(x.name)}</span><span class="money">${x.score}</span></li>`; }).join('')}</ol>
+      <ol class="standings">${s.map((x, k) => { const p = v.players.find(p => p.id === x.id) || {}; return `<li class="${x.id === me.id ? 'me' : ''}"><span class="rank">${k + 1}</span><i style="--c:${p.color}"></i><span class="nm">${esc(x.name)}</span><span class="money">${num(x.score)}</span></li>`; }).join('')}</ol>
       ${canLobby ? '<button class="big fire" data-act="toLobby">Back to the lobby</button>' : '<p class="fine">Waiting for the host…</p>'}</div>`;
   }
 
@@ -2641,7 +2970,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     return `<div class="scorebar">${g.contestants.map(id => {
       const p = v.players.find(p => p.id === id) || {};
       return `<div class="chip ${id === me.id ? 'me' : ''} ${p.connected === false ? 'gone' : ''} ${g.buzz === id ? 'buzzing' : ''}"><i style="--c:${p.color}"></i>
-        <span>${g.control === id ? '👑 ' : ''}${esc(g.names[id])}</span><b>${g.scores[id]}</b>
+        <span>${g.control === id ? '👑 ' : ''}${esc(g.names[id])}</span><b>${num(g.scores[id])}</b>
         ${host ? `<button class="tiny" data-act="adjust" data-pid="${esc(id)}" data-d="-1" title="Take a point">−</button><button class="tiny" data-act="adjust" data-pid="${esc(id)}" data-d="1" title="Give a point">+</button>` : ''}</div>`;
     }).join('')}</div>`;
   }
@@ -2692,7 +3021,7 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
   }
   function genCode() { let c = ''; for (let i = 0; i < 4; i++) c += CODE_CHARS[Math.floor(rng() * CODE_CHARS.length)]; return c; }
   function newRoom() {
-    return { ownerId: me.id, showHostId: me.id, showText: false, useSpecs: true, board: null, players: [{ id: me.id, name: me.name, color: me.color, connected: true }], game: null };
+    return { ownerId: me.id, showHostId: me.id, showText: false, useSpecs: true, board: null, players: [{ id: me.id, name: me.name, color: me.color, look: me.look, connected: true }], game: null };
   }
 
   function buzz() {
@@ -2707,7 +3036,9 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
     A.audio(); // unlock audio on the first tap
     const act = b.dataset.act;
     switch (act) {
-      case 'color': me.color = b.dataset.c; local.set('color', me.color); render(); break;
+      case 'color': me.color = b.dataset.c; lookChanged(); break;
+      case 'look': { const k = b.dataset.k, n = A.LOOKS[k].length; me.look[k] = (me.look[k] + +b.dataset.d + n) % n; lookChanged(); break; }
+      case 'lookRandom': me.look = randomLook(); me.color = COLORS[Math.floor(rng() * COLORS.length)]; lookChanged(); break;
       case 'create': setName(); hostRoom(genCode(), newRoom()); break;
       case 'join': {
         setName();
@@ -2744,9 +3075,9 @@ window.HGS_SOUNDS = {"correct":"data:audio/ogg;base64,T2dnUwACAAAAAAAAAADtKgAAAA
       case 'toLobby': send({ t: 'lobby' }); break;
       case 'buzz': buzz(); break;
       case 'pick': send(b.dataset.robin != null ? { t: 'pick', robin: +b.dataset.robin } : { t: 'pick', c: +b.dataset.c, r: +b.dataset.r }); break;
-      case 'judge': send({ t: 'judge', ok: b.dataset.ok === '1' }); break;
+      case 'judge': send({ t: 'judge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
       case 'robinJudge': send({ t: 'robinJudge', ok: b.dataset.ok === '1' }); break;
-      case 'finalJudge': send({ t: 'finalJudge', ok: b.dataset.ok === '1' }); break;
+      case 'finalJudge': send({ t: 'finalJudge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
       case 'finalPick': send({ t: 'finalPick', k: +b.dataset.k }); break;
       case 'adjust': send({ t: 'adjust', pid: b.dataset.pid, d: +b.dataset.d }); break;
       case 'setControl': send({ t: 'setControl', pid: b.dataset.pid }); break;

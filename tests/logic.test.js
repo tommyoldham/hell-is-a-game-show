@@ -3,9 +3,12 @@ const assert = require('assert');
 const H = require('../src/logic.js');
 
 let passed = 0, failed = 0;
+const pending = [];
 function test(name, fn) {
-  try { fn(); passed++; console.log('  ok  ' + name); }
-  catch (e) { failed++; console.log('  FAIL ' + name + '\n       ' + (e && e.message)); }
+  const pass = () => { passed++; console.log('  ok  ' + name); };
+  const fail = e => { failed++; console.log('  FAIL ' + name + '\n       ' + (e && e.message)); };
+  try { const r = fn(); if (r && r.then) pending.push(r.then(pass, fail)); else pass(); }
+  catch (e) { fail(e); }
 }
 function seeded(seed) { // mulberry32
   return function () {
@@ -227,6 +230,30 @@ function playToFinal() {
   ok(act('jack', { t: 'toFinal' }));
   return t;
 }
+test('a half-right answer gets half the points and control, and ends the question', () => {
+  const { g, act } = newGame();
+  opening(g, act);
+  ok(act('jay', { t: 'pick', c: 3, r: 2 }));
+  ok(act('mike', { t: 'buzz' }));
+  ok(act('jack', { t: 'judge', half: true }));
+  assert.strictEqual(g.scores.mike, 1.5);
+  assert.strictEqual(g.control, 'mike');
+  assert.strictEqual(g.phase, 'answer');
+  assert(g.last.ok && g.last.half);
+});
+test('a half-right final answer wins half the wager', () => {
+  const { g, act } = playToFinal();
+  ok(act('jay', { t: 'finalPick', k: 0 }));
+  ok(act('jay', { t: 'wager', n: 4 }));
+  ok(act('jack', { t: 'finalQ' }));
+  ok(act('jack', { t: 'finalReveal' }));
+  const before = g.scores.jay;
+  ok(act('jack', { t: 'finalJudge', ok: false }));
+  ok(act('jack', { t: 'finalJudge', ok: false }));
+  ok(act('jack', { t: 'finalJudge', half: true })); // jay is last in the order
+  assert.strictEqual(g.final.results.jay, 'half');
+  assert.strictEqual(g.scores.jay, before + 2);
+});
 test('last place picks the final; wagers are capped and secret; leader revealed first', () => {
   const { g, act } = playToFinal();
   assert.strictEqual(g.phase, 'finalPick');
@@ -266,5 +293,37 @@ test('clearing the whole board goes straight to the final', () => {
   assert.strictEqual(g.phase, 'wager', 'single final skips the category pick');
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+console.log('fresh questions (Open Trivia DB)');
+const T = require('../src/trivia.js');
+test('database results decode, get options only when they need them, and rank easy-first', () => {
+  const enc = encodeURIComponent;
+  const mc = (q, a, wrong, difficulty = 'easy') => ({ type: 'multiple', difficulty, question: enc(q), correct_answer: enc(a), incorrect_answers: wrong.map(enc) });
+  const plain = T.toCell(mc('Who directed "Jaws"?', 'Steven Spielberg', ['A', 'B', 'C']), Math.random);
+  assert.strictEqual(plain.q, 'Who directed "Jaws"?');
+  const which = T.toCell(mc('Which of these is a fruit?', 'Apple', ['Rock', 'Sock', 'Clock']), Math.random);
+  assert(/\(.*Apple.*\)$/.test(which.q) && / or /.test(which.q), which.q);
+  const tf = T.toCell({ type: 'boolean', difficulty: 'easy', question: enc('The sky is blue.'), correct_answer: 'True', incorrect_answers: ['False'] }, Math.random);
+  assert.strictEqual(tf.q, 'True or false: The sky is blue.');
+  const med = T.toCell(mc('Short?', 'x', ['a', 'b', 'c'], 'medium'), Math.random);
+  const ranked = T.rank([med, which, plain, tf]);
+  assert.deepStrictEqual(ranked, [tf, plain, which, med], 'true/false, then shorter, then medium');
+  assert.strictEqual(ranked[3], med, 'medium questions are worth the most');
+});
+test('the client never serves a question it has already served', () => {
+  const m = new Map(), store = { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) };
+  const rs = n => Array.from({ length: n }, (_, i) => ({ type: 'multiple', difficulty: 'easy', question: 'Q' + i, correct_answer: 'A', incorrect_answers: [] }));
+  global.fetch = url => Promise.resolve({ json: () => Promise.resolve(/api_token/.test(url) ? { token: 't' } : { response_code: 0, results: rs(10) }) });
+  const c = T.Client({ store });
+  return c.category(9).then(cat => {
+    assert.strictEqual(cat.cells.length, 5);
+    return T.Client({ store }).category(9).then(cat2 => {
+      const a = new Set(cat.cells.map(x => x.q));
+      assert(cat2.cells.every(x => !a.has(x.q)), 'second board repeats nothing from the first');
+    });
+  });
+});
+
+Promise.all(pending).then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+});

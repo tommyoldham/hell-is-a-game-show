@@ -32,6 +32,15 @@ show and shares the 4-letter code; everyone else joins with it.
 - **Question library:** 50 ready-made categories of 5 questions each (movies, games,
   music, science, Straya, spooky stuff and more), plus 12 round robins and 9 finals.
   The host can hit 🎲 Random board, add any library category, or write their own.
+- **Fresh questions:** ⚡ Fresh board fills 6 categories (about half a minute) and ⚡ +
+  Fresh category adds one, from the free Open Trivia Database (CC BY-SA 4.0). It
+  prefers easy questions, drops long or multi-part answers, and never repeats one:
+  a database session token plus a list of seen questions in the host's browser.
+  🔄 next to any fresh question swaps it for a new one. ⚡ Fresh finals fills the
+  final gamble too.
+- **Avatars:** everyone builds their soul on the join screen or in the lobby:
+  colour, hat, eyes and an extra (moustache, fangs, bow tie...). It's saved in their
+  browser.
 - **Specialties:** in the lobby, each contestant picks one library category they'll
   crush. With the setting on (the default), those categories go on the board first,
   labelled "⭐ Jay's pick", and the host's categories fill the rest (8 at most).
@@ -42,9 +51,9 @@ show and shares the 4-letter code; everyone else joins with it.
   picks. The host reads the question out loud; contestants only see the question
   if "show questions on contestants' screens" is ticked in the lobby.
 - **Buzzers:** the first buzz locks everyone else out, and later buzzes show how far
-  behind they were. The host taps ✔ or ✖. A wrong answer costs the points, locks
+  behind they were. The host taps ✔, ½ or ✖. A wrong answer costs the points, locks
   that player out and reopens the buzzers. A correct answer gains the points and
-  control of the board.
+  control of the board; a half-right one gains half the points and control.
 - **Fraud statements:** a question can be marked as fraud. It's a statement with a
   lie in it, worth double, and it's revealed as fraud only once someone picks it.
 - **Round robins:** "name as many X as you can". Players take turns from whoever picked
@@ -52,7 +61,7 @@ show and shares the 4-letter code; everyone else joins with it.
   and second place gets 2.
 - **Final gamble:** last place picks one of up to 3 final categories. Everyone bets
   in secret (up to their score, or 5 if that's more), then types an answer. The host
-  reveals the answers leader-first and rules on each one.
+  reveals the answers leader-first and rules on each one (½ wins half the bet).
 - **Show polish:** name plates with live scores under each podium, "+3"/"−2" pop-ups,
   big announcement cards (FRAUD!, BUZZED IN, CORRECT!, ROUND ROBIN, FINAL GAMBLE),
   board tiles dealt in, confetti at the end, and a background music loop in the
@@ -71,6 +80,7 @@ node tools/serve.js 8777  # serve dist/ for local testing (one tab per player)
 - `src/questions.js`: the library (50 categories, 12 round robins, 9 finals); the starter board is its first 5.
 - `src/logic.js`: the pure rules engine. `viewFor()` hides answers, wagers and final
   answers per player.
+- `src/trivia.js`: the Open Trivia Database client (rate-limit queue, token, seen list, spare pool).
 - `src/art.js`: the procedural pixel studio, demon and souls (plus unused flag/chiptune
   helpers from the first prototype).
 - `src/app.js`: UI, the board editor and networking. The room owner's browser is

@@ -58,6 +58,7 @@ const html = read('index.html')
   .replace('/*SOUNDS*/', () => 'window.HGS_SOUNDS = ' + JSON.stringify(sounds) + ';')
   .replace('/*QUESTIONS*/', () => js(read('questions.js')))
   .replace('/*LOGIC*/', () => js(read('logic.js')))
+  .replace('/*TRIVIA*/', () => js(read('trivia.js')))
   .replace('/*ART*/', () => js(read('art.js')))
   .replace('/*APP*/', () => js(read('app.js')));
 

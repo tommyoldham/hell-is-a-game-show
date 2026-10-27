@@ -43,12 +43,16 @@
   function rng() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function cleanName(n) { return String(n || '').replace(/\s+/g, ' ').trim().slice(0, 16) || 'Lost Soul'; }
-  function pts(n) { return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n); }
+  // Half points show as ½ (2.5 -> 2½).
+  function num(n) { const a = Math.abs(n), w = Math.floor(a); return (n < 0 ? '−' : '') + (a - w ? (w || '') + '½' : w); }
+  function pts(n) { return (n > 0 ? '+' : '') + num(n); }
 
+  function randomLook() { const o = {}; for (const k in A.LOOKS) o[k] = Math.floor(rng() * A.LOOKS[k].length); return o; }
   const me = {
     id: session.get('pid') || rid(),
     name: local.get('name', ''),
     color: local.get('color', COLORS[Math.floor(rng() * COLORS.length)]),
+    look: A.cleanLook(local.get('look', null) || randomLook()),
   };
   session.set('pid', me.id);
 
@@ -208,7 +212,7 @@
     if (!p) p = room.players.find(p => !p.connected && p.name.toLowerCase() === name.toLowerCase() && p.id !== room.ownerId);
     if (!p) {
       if (room.players.length >= MAX_PLAYERS) return null;
-      p = { id: String(msg.pid || rid()).slice(0, 20), name, color: COLORS.includes(msg.color) ? msg.color : COLORS[0], connected: true, spec: H.LIBRARY.cats.some(c => c.name === msg.spec) ? msg.spec : '' };
+      p = { id: String(msg.pid || rid()).slice(0, 20), name, color: COLORS.includes(msg.color) ? msg.color : COLORS[0], look: A.cleanLook(msg.look), connected: true, spec: H.LIBRARY.cats.some(c => c.name === msg.spec) ? msg.spec : '' };
       if (room.players.some(o => o.color === p.color)) p.color = COLORS.find(col => !room.players.some(o => o.color === col)) || p.color;
       room.players.push(p);
       toast(room.game ? `${name} is watching` : `${name} joined`);
@@ -217,6 +221,7 @@
       if (!p.connected) { toast(`${p.name} is back`); play('pop'); }
       p.connected = true;
       if (name) p.name = name;
+      if (msg.look) p.look = A.cleanLook(msg.look);
       if (!room.game && msg.spec !== undefined) p.spec = H.LIBRARY.cats.some(c => c.name === msg.spec) ? msg.spec : '';
     }
     return p.id;
@@ -300,7 +305,7 @@
         clearTimeout(net.connectTimer);
         net.hostConn = conn;
         lastHost = Date.now();
-        conn.send({ t: 'hello', pid: me.id, name: me.name, color: me.color, spec: S.spec });
+        conn.send({ t: 'hello', pid: me.id, name: me.name, color: me.color, look: me.look, spec: S.spec });
       });
       conn.on('data', msg => { lastHost = Date.now(); onGuestData(msg); });
       conn.on('close', () => {
@@ -350,6 +355,13 @@
         room.showHostId = msg.pid;
         room.board = null; // the new host brings their own board
         break;
+      case 'setLook': {
+        const p = room.players.find(p => p.id === pid);
+        if (!p) return;
+        p.look = A.cleanLook(msg.look);
+        if (COLORS.includes(msg.color) && !room.players.some(o => o !== p && o.color === msg.color)) p.color = msg.color;
+        break;
+      }
       case 'setSpec': {
         const p = room.players.find(p => p.id === pid);
         if (!p || g) return;
@@ -471,7 +483,7 @@
     }
     if (g.last && JSON.stringify(g.last) !== JSON.stringify(p.last) && g.seq !== p.seq) {
       play(g.last.ok ? 'correct' : 'wrong');
-      splash(g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
+      splash(g.last.half ? 'HALF!' : g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
       if (!g.last.ok) { S.fallAt[g.last.pid] = stage.now(); setTimeout(() => play('trapdoor', 0.4), 200); stage.set({ mood: 'smirk' }); }
       else stage.set({ mood: 'bored' });
     }
@@ -488,7 +500,7 @@
         const ok = g.final.results[pid];
         play(ok ? 'correct' : 'wrong');
         const w = g.final.wagers[pid] || 0;
-        if (g.phase !== 'over') splash(ok ? 'CORRECT!' : 'WRONG!', `${name(pid)} ${pts(ok ? w : -w)}`, ok ? 'good' : 'bad', 1300);
+        if (g.phase !== 'over') splash(ok === 'half' ? 'HALF!' : ok ? 'CORRECT!' : 'WRONG!', `${name(pid)} ${pts(ok === 'half' ? w / 2 : ok ? w : -w)}`, ok ? 'good' : 'bad', 1300);
       }
     }
   }
@@ -502,7 +514,7 @@
     const pct = x => (x / A.W * 100).toFixed(2) + '%';
     const html = (hostName ? `<div class="plate host" style="left:${pct(56)};width:${pct(76)}"><span>😈 ${esc(hostName)}</span><b>HOST</b></div>` : '') +
       entries.map((e, k) => `<div class="plate ${e.me ? 'me' : ''} ${e.connected === false ? 'gone' : ''}" style="left:${pct(xs[k])};width:${pct(gap - 2)};--c:${e.color}">
-        <span>${esc(e.name)}</span>${e.score != null ? `<b>${e.score}</b>` : ''}</div>`).join('');
+        <span>${esc(e.name)}</span>${e.score != null ? `<b>${num(e.score)}</b>` : ''}</div>`).join('');
     if (layer.dataset.html !== html) { layer.innerHTML = html; layer.dataset.html = html; }
     // Floating "+3" / "−2" when a score changes.
     const floats = stageNode.querySelector('.floats');
@@ -529,7 +541,7 @@
     if (!g) {
       // Lobby: everyone who isn't hosting stands at a podium.
       const ps = v.players.filter(p => p.id !== v.showHostId);
-      stage.set({ players: ps.map(p => ({ id: p.id, color: p.color, connected: p.connected, mood: 'idle' })) });
+      stage.set({ players: ps.map(p => ({ id: p.id, color: p.color, look: p.look, connected: p.connected, mood: 'idle' })) });
       syncPlates(ps.map(p => ({ id: p.id, name: p.name, color: p.color, connected: p.connected, me: p.id === me.id })), hostP && hostP.name);
       return;
     }
@@ -549,7 +561,7 @@
         }
         if (g.phase === 'robinDone' && R && R.result && R.result.winner === id) mood = 'happy';
         if (g.phase === 'over') mood = H.standings(g)[0].id === id ? 'happy' : 'idle';
-        return { id, color: p.color, connected: p.connected, mood, answered: glow, bet: g.control === id && g.phase === 'board', falling };
+        return { id, color: p.color, look: p.look, connected: p.connected, mood, answered: glow, bet: g.control === id && g.phase === 'board', falling };
       }),
     });
   }
@@ -575,6 +587,7 @@
     app.innerHTML = html;
     const ss = app.querySelector('#stageSlot');
     if (ss) ss.replaceWith(stageNode);
+    drawAvatars();
     const es = app.querySelector('#editorSlot');
     if (es) { if (!editor.firstChild) buildEditor(); es.replaceWith(editor); }
     if (focus && editor.isConnected) { focus.focus(); if (sel) safe(() => focus.setSelectionRange(sel[0], sel[1])); }
@@ -624,9 +637,7 @@
       <div class="card">
         <label class="field"><span>Your name</span>
           <input id="name" maxlength="16" placeholder="Lost Soul" value="${esc(me.name)}" autocomplete="off"></label>
-        <div class="field"><span>Your soul colour</span>
-          <div class="swatches">${COLORS.map(c => `<button class="swatch ${c === me.color ? 'on' : ''}" style="--c:${c}" data-act="color" data-c="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
-        </div>
+        ${avatarMaker()}
         <button class="big fire" data-act="create">🔥 Open a new show</button>
         <div class="or">or join a friend's show</div>
         <div class="joinrow">
@@ -650,9 +661,7 @@
         <input type="hidden" id="code" value="${esc(S.joinCode)}">
         <label class="field"><span>Your name</span>
           <input id="name" maxlength="16" placeholder="Lost Soul" value="${esc(me.name)}" autocomplete="off" autofocus></label>
-        <div class="field"><span>Your soul colour</span>
-          <div class="swatches">${COLORS.map(c => `<button class="swatch ${c === me.color ? 'on' : ''}" style="--c:${c}" data-act="color" data-c="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
-        </div>
+        ${avatarMaker()}
         <button class="big fire" data-act="join">🔥 Join the show</button>
         <button class="link" data-act="noInvite">or open my own show instead</button>
       </div>
@@ -695,6 +704,7 @@
         <label class="check"><input type="checkbox" data-act="useSpecs" ${v.useSpecs !== false ? 'checked' : ''} ${owner ? '' : 'disabled'}>
           Put everyone's specialty on the board <span class="fine">(each contestant picks a category they'll crush)</span></label>
       </div>
+      ${!host ? `<div class="card"><h2>👻 Your soul</h2>${avatarMaker()}</div>` : ''}
       ${!host && v.useSpecs !== false ? renderSpecPicker(v) : ''}
       ${host ? `<div class="card">
           <h2>Your board</h2>
@@ -725,6 +735,33 @@
   }
 
   // ---------- specialty picker (contestants)
+  // ---------- avatar creator
+  const LOOK_LABELS = { hat: 'Hat', eyes: 'Eyes', face: 'Extra' };
+  function avatarMaker() {
+    return `<div class="field avatar"><span>Your soul</span>
+      <div class="avrow"><canvas class="avatar" width="18" height="25" aria-label="your soul"></canvas>
+        <div class="avopts">${Object.keys(A.LOOKS).map(k => `<div class="avopt">
+          <button type="button" class="small" data-act="look" data-k="${k}" data-d="-1" aria-label="previous ${LOOK_LABELS[k]}">◀</button>
+          <span><i>${LOOK_LABELS[k]}</i> ${esc(A.LOOKS[k][me.look[k]])}</span>
+          <button type="button" class="small" data-act="look" data-k="${k}" data-d="1" aria-label="next ${LOOK_LABELS[k]}">▶</button></div>`).join('')}
+          <button type="button" class="small" data-act="lookRandom">🎲 Surprise me</button></div></div>
+      <div class="swatches">${COLORS.map(c => `<button type="button" class="swatch ${c === me.color ? 'on' : ''}" style="--c:${c}" data-act="color" data-c="${c}" aria-label="colour ${c}"></button>`).join('')}</div>
+    </div>`;
+  }
+  function drawAvatars() {
+    app.querySelectorAll('canvas.avatar').forEach(c => {
+      const x = c.getContext('2d');
+      x.clearRect(0, 0, c.width, c.height);
+      x.drawImage(A.soul(me.color, 'idle', 0, me.look), 0, 0);
+    });
+  }
+  // Saved in this browser; in a room, the change shows on your podium at once.
+  function lookChanged() {
+    local.set('color', me.color); local.set('look', me.look);
+    if (S.screen === 'lobby') send({ t: 'setLook', look: me.look, color: me.color });
+    render();
+  }
+
   function renderSpecPicker(v) {
     const mine = (v.players.find(p => p.id === me.id) || {}).spec || '';
     const groups = {};
@@ -746,6 +783,25 @@
 
   // ---------- board editor (host only; lives in their browser)
   let saveTimer = null;
+  const trivia = window.HGS_TRIVIA ? HGS_TRIVIA.Client({ store: safe(() => localStorage), rng }) : null;
+  // Fetching fresh questions takes a few seconds per category (OpenTDB's rate
+  // limit), so the editor shows progress and blocks other generate buttons.
+  function generate(label, job) {
+    if (S.gen) return;
+    S.gen = label; buildEditor();
+    Promise.resolve().then(job)
+      .catch(e => toast(e && e.message && !/fetch|network/i.test(e.message) ? e.message : 'Couldn\'t reach the trivia database. Check your internet and try again.', 'bad'))
+      .then(() => { S.gen = null; buildEditor(); });
+  }
+  // Library categories this browser has used least come first, so random
+  // boards don't keep serving the same questions.
+  function libPick(n) {
+    const used = local.get('libUsed', {});
+    const out = H.shuffle(H.LIBRARY.cats, rng).sort((a, b) => (used[a.name] || 0) - (used[b.name] || 0)).slice(0, n);
+    out.forEach(c => { used[c.name] = (used[c.name] || 0) + 1; });
+    local.set('libUsed', used);
+    return H.clone(out);
+  }
   function draftChanged() {
     local.set('board', S.draft);
     clearTimeout(saveTimer);
@@ -762,8 +818,9 @@
       c.cells = c.cells || [];
       body = `<div class="erow"><input data-e="cat-name" value="${esc(c.name)}" maxlength="30" placeholder="Category name, e.g. Horror movies">
           <button class="small" type="button" data-e="cat-del">Delete</button></div>
+        ${c.src ? `<p class="fine">Fresh from the trivia database. 🔄 swaps one question for a new one.</p>` : ''}
         ${H.POINTS.map((p, r) => { const x = c.cells[r] || (c.cells[r] = { q: '', a: '', fraud: false }); return `
-        <div class="ecell"><b>${p}</b>
+        <div class="ecell"><b>${p}${c.src ? `<button type="button" class="swap" data-e="swap" data-r="${r}" title="Swap for a new question" ${S.gen ? 'disabled' : ''}>🔄</button>` : ''}</b>
           <textarea data-e="q" data-r="${r}" rows="2" maxlength="300" placeholder="${p}-point question${p === 1 ? ' (easy)' : p === 5 ? ' (hard)' : ''}">${esc(x.q)}</textarea>
           <input data-e="a" data-r="${r}" maxlength="300" placeholder="Answer (only you see this)" value="${esc(x.a)}">
           <label class="check"><input type="checkbox" data-e="fraud" data-r="${r}" ${x.fraud ? 'checked' : ''}> Fraud statement (double points)</label>
@@ -774,7 +831,8 @@
           <input data-e="rq" data-r="${k}" maxlength="300" placeholder="Name...  e.g. Name Pokémon" value="${esc(x.q)}">
           <input data-e="ra" data-r="${k}" maxlength="300" placeholder="Notes for you (optional)" value="${esc(x.a)}"></div>`; }).join('')}`;
     } else {
-      body = `<p class="fine">Up to 3. Last place picks one; everyone wagers and writes an answer.</p>
+      body = `<p class="fine">Up to 3. Last place picks one; everyone wagers and writes an answer.
+          ${trivia ? `<button class="small" type="button" data-e="gen-finals" ${S.gen ? 'disabled' : ''}>⚡ Fresh finals</button>` : ''}</p>
         ${[0, 1, 2].map(k => { const x = d.finals[k] || { cat: '', q: '', a: '' }; return `<div class="ecell"><b>${k + 1}</b>
           <input data-e="fc" data-r="${k}" maxlength="30" placeholder="Category, e.g. Video game movies" value="${esc(x.cat)}">
           <textarea data-e="fq" data-r="${k}" rows="2" maxlength="300" placeholder="The final question">${esc(x.q)}</textarea>
@@ -782,8 +840,13 @@
     }
     const st = H.boardStats(H.cleanBoard(d));
     editor.innerHTML = `
+      ${trivia ? `<div class="egen">
+        <button class="small fire" type="button" data-e="gen-board" ${S.gen ? 'disabled' : ''}>⚡ Fresh board</button>
+        <select data-e="gen-add" ${S.gen || d.cats.length >= H.LIMITS.cats ? 'disabled' : ''}><option value="">⚡ + Fresh category…</option>${trivia.CATS.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+        <span class="fine">${S.gen ? `<b class="busy">${esc(S.gen)}</b>` : 'Simple questions from the Open Trivia Database, never repeated.'}</span>
+      </div>` : ''}
       <div class="etools">
-        <button class="small fire" type="button" data-e="random">🎲 Random board</button>
+        <button class="small" type="button" data-e="random">🎲 Random from library</button>
         <button class="small" type="button" data-e="starter">Load starter board</button>
         <button class="small" type="button" data-e="blank">New blank board</button>
         <button class="small" type="button" data-e="export">Save to file</button>
@@ -793,7 +856,8 @@
       <div class="etabs">${tabs.map(t => `<button type="button" class="${t.k === S.tab ? 'on' : ''}" data-e="tab" data-k="${t.k}">${esc(t.label)}</button>`).join('')}
         ${d.cats.length < H.LIMITS.cats ? `<button type="button" data-e="cat-add">+ Blank</button>
           <select data-e="lib-add"><option value="">+ From library (${H.LIBRARY.cats.length})…</option>${H.LIBRARY.cats.map((c, k) => d.cats.some(x => x.name === c.name) ? '' : `<option value="${k}">${esc(c.name)}</option>`).join('')}</select>` : ''}</div>
-      <div class="ebody">${body}</div>`;
+      <div class="ebody">${body}</div>
+      ${trivia ? '<p class="fine credit">Fresh questions: <a href="https://opentdb.com" target="_blank" rel="noopener">Open Trivia Database</a>, CC BY-SA 4.0.</p>' : ''}`;
   }
   editor.addEventListener('input', e => {
     const el = e.target, k = el.dataset.e, r = +el.dataset.r, d = S.draft;
@@ -808,6 +872,13 @@
     draftChanged();
   });
   editor.addEventListener('change', e => {
+    if (e.target.dataset.e === 'gen-add' && e.target.value !== '') {
+      const id = +e.target.value, name = (trivia.CATS.find(c => c.id === id) || {}).name;
+      generate(`Fetching ${name}…`, () => trivia.category(id).then(c => {
+        S.draft.cats.push(c); S.tab = S.draft.cats.length - 1; draftChanged();
+      }));
+      return;
+    }
     if (e.target.dataset.e === 'lib-add' && e.target.value !== '') {
       S.draft.cats.push(H.clone(H.LIBRARY.cats[+e.target.value]));
       S.tab = S.draft.cats.length - 1;
@@ -830,7 +901,31 @@
     if (k === 'tab') S.tab = /^\d+$/.test(b.dataset.k) ? +b.dataset.k : b.dataset.k;
     else if (k === 'cat-add') { d.cats.push({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) }); S.tab = d.cats.length - 1; draftChanged(); }
     else if (k === 'cat-del') { if (!confirm('Delete this category and its questions?')) return; d.cats.splice(S.tab, 1); S.tab = 0; draftChanged(); }
-    else if (k === 'random') { if (!confirm('Replace your board with 6 random categories from the library?')) return; S.draft = H.randomBoard(rng); S.tab = 0; draftChanged(); }
+    else if (k === 'random') { if (!confirm('Replace your board with 6 random categories from the library?')) return; S.draft = Object.assign(H.randomBoard(rng), { cats: libPick(6) }); S.tab = 0; draftChanged(); }
+    else if (k === 'gen-board') {
+      if (!confirm('Replace your board with 6 categories of fresh questions? It takes about half a minute.')) return;
+      // A broad, easy mix: General Knowledge plus five others, picked at random.
+      const ids = [9].concat(H.shuffle(trivia.CATS.slice(1, 13).map(c => c.id), rng).slice(0, 5));
+      generate('Fetching fresh questions…', () => {
+        const cats = [];
+        return ids.reduce((p, id, n) => p.then(() => {
+          S.gen = `Fetching category ${n + 1} of ${ids.length}…`; buildEditor();
+          return trivia.category(id).then(c => cats.push(c), () => {});
+        }), Promise.resolve()).then(() => {
+          if (!cats.length) throw new Error('Couldn\'t reach the trivia database. Check your internet and try again.');
+          S.draft = { title: 'Fresh board', cats, robins: H.shuffle(H.LIBRARY.robins, rng).slice(0, 3).map(H.clone), finals: d.finals.length ? d.finals : H.shuffle(H.LIBRARY.finals, rng).slice(0, 3).map(H.clone) };
+          S.tab = 0; draftChanged();
+          return trivia.finals(3).then(f => { if (f.length === 3) { S.draft.finals = f; draftChanged(); } }, () => {});
+        });
+      });
+      return;
+    }
+    else if (k === 'gen-finals') { generate('Fetching fresh finals…', () => trivia.finals(3).then(f => { if (!f.length) throw new Error('No fresh finals came back. Try again.'); d.finals = f; draftChanged(); })); return; }
+    else if (k === 'swap') {
+      const c = d.cats[S.tab], r = +b.dataset.r;
+      generate('Swapping question…', () => trivia.one(c.src).then(x => { c.cells[r] = x; draftChanged(); }));
+      return;
+    }
     else if (k === 'starter') { if (!confirm('Replace your board with the starter board?')) return; S.draft = H.clone(H.STARTER); S.tab = 0; draftChanged(); }
     else if (k === 'blank') { if (!confirm('Start a blank board? Your current board will be replaced (save it to a file first if you want to keep it).')) return; S.draft = { title: '', cats: [0, 1, 2, 3].map(() => ({ name: '', cells: H.POINTS.map(() => ({ q: '', a: '', fraud: false })) })), robins: [], finals: [] }; S.tab = 0; draftChanged(); }
     else if (k === 'export') {
@@ -856,7 +951,7 @@
       <div class="topbar">
         ${logo(true)}
         <div class="meta">
-          ${playing ? `<span class="money">${g.scores[me.id]} pts</span>` : host ? '<span class="pill">😈 You are the host</span>' : '<span class="pill dim">Watching</span>'}
+          ${playing ? `<span class="money">${num(g.scores[me.id])} pts</span>` : host ? '<span class="pill">😈 You are the host</span>' : '<span class="pill dim">Watching</span>'}
           ${soundBtn()}
         </div>
       </div>
@@ -939,14 +1034,14 @@
       const L = g.last;
       main = `${c.q ? `<h2 class="question">${esc(c.q)}</h2>` : ''}
         <div class="reveal"><span>Answer</span><b>${esc(c.a)}</b></div>
-        <p class="center result ${L && L.ok ? 'good' : 'bad'}">${L && L.ok ? `${nm(g, L.pid)} got it! ${pts(L.delta)}` : 'Nobody got it.'}</p>
+        <p class="center result ${L && L.ok ? 'good' : 'bad'}">${L && L.ok ? `${nm(g, L.pid)} ${L.half ? 'half got it' : 'got it'}! ${pts(L.delta)}` : 'Nobody got it.'}</p>
         ${host ? '<button class="big fire" data-act="toBoard">Back to the board ▶</button>' : ''}`;
     } else if (host) {
       main = `<h2 class="question">${esc(c.q)}</h2>
         <div class="reveal host"><span>Answer (just you)</span><b>${esc(c.a)}</b></div>
         ${g.phase === 'buzzed'
           ? `<div class="buzzed"><b>${nm(g, g.buzz)}</b> buzzed in!</div>${buzzList(g)}
-             <div class="judge"><button class="big good" data-act="judge" data-ok="1">✔ Correct ${pts(c.value)}</button><button class="big bad" data-act="judge" data-ok="0">✖ Wrong ${pts(-c.value)}</button></div>`
+             <div class="judge"><button class="big good" data-act="judge" data-ok="1">✔ Correct ${pts(c.value)}</button><button class="big half" data-act="judge" data-half="1">½ Half ${pts(c.value / 2)}</button><button class="big bad" data-act="judge" data-ok="0">✖ Wrong ${pts(-c.value)}</button></div>`
           : `<p class="center waiting">Read it out loud. Buzzers are live.${g.lockedOut.length ? ` (Locked out: ${g.lockedOut.map(id => nm(g, id)).join(', ')})` : ''}</p>`}
         <div class="deskrow"><button class="small" data-act="resetBuzz">↺ Reset buzzers</button><button class="small" data-act="skip">Nobody gets it: show the answer</button></div>`;
     } else {
@@ -1016,10 +1111,10 @@
           const done = id in F.results;
           const shown = done || host || id === me.id;
           return `<li class="${done ? (F.results[id] ? 'good' : 'bad') : ''} ${id === next ? 'now' : ''}">${nm(g, id)}: ${shown ? `<b>${esc(F.answers[id])}</b>` : '???'}
-            <span class="fine">bet ${done || host || id === me.id ? F.wagers[id] : '?'}</span>${done ? (F.results[id] ? ` ✔ ${pts(F.wagers[id])}` : ` ✖ ${pts(-F.wagers[id])}`) : ''}</li>`;
+            <span class="fine">bet ${done || host || id === me.id ? F.wagers[id] : '?'}</span>${done ? (F.results[id] === 'half' ? ` ½ ${pts(F.wagers[id] / 2)}` : F.results[id] ? ` ✔ ${pts(F.wagers[id])}` : ` ✖ ${pts(-F.wagers[id])}`) : ''}</li>`;
         }).join('')}</ul>
         ${host && next ? `<div class="reveal host"><span>Answer (just you)</span><b>${esc(F.a)}</b></div>
-          <p>Rule on <b>${nm(g, next)}</b>:</p><div class="judge"><button class="big good" data-act="finalJudge" data-ok="1">✔ Correct</button><button class="big bad" data-act="finalJudge" data-ok="0">✖ Wrong</button></div>` : ''}`;
+          <p>Rule on <b>${nm(g, next)}</b>:</p><div class="judge"><button class="big good" data-act="finalJudge" data-ok="1">✔ Correct</button><button class="big half" data-act="finalJudge" data-half="1">½ Half</button><button class="big bad" data-act="finalJudge" data-ok="0">✖ Wrong</button></div>` : ''}`;
     }
     return `<div class="panel center finalpanel"><h1 class="glow">🎲 Final gamble</h1>${body}</div>`;
   }
@@ -1031,7 +1126,7 @@
     const canLobby = v.ownerId === me.id || amHost(g);
     return `<div class="panel center"><h1 class="glow">${top.length > 1 ? `A tie! ${top.map(x => esc(x.name)).join(' & ')}` : `${esc(s[0].name)} wins!`}</h1>
       ${g.final && g.final.a ? `<p class="fine">Final answer: ${esc(g.final.a)}</p>` : ''}
-      <ol class="standings">${s.map((x, k) => { const p = v.players.find(p => p.id === x.id) || {}; return `<li class="${x.id === me.id ? 'me' : ''}"><span class="rank">${k + 1}</span><i style="--c:${p.color}"></i><span class="nm">${esc(x.name)}</span><span class="money">${x.score}</span></li>`; }).join('')}</ol>
+      <ol class="standings">${s.map((x, k) => { const p = v.players.find(p => p.id === x.id) || {}; return `<li class="${x.id === me.id ? 'me' : ''}"><span class="rank">${k + 1}</span><i style="--c:${p.color}"></i><span class="nm">${esc(x.name)}</span><span class="money">${num(x.score)}</span></li>`; }).join('')}</ol>
       ${canLobby ? '<button class="big fire" data-act="toLobby">Back to the lobby</button>' : '<p class="fine">Waiting for the host…</p>'}</div>`;
   }
 
@@ -1039,7 +1134,7 @@
     return `<div class="scorebar">${g.contestants.map(id => {
       const p = v.players.find(p => p.id === id) || {};
       return `<div class="chip ${id === me.id ? 'me' : ''} ${p.connected === false ? 'gone' : ''} ${g.buzz === id ? 'buzzing' : ''}"><i style="--c:${p.color}"></i>
-        <span>${g.control === id ? '👑 ' : ''}${esc(g.names[id])}</span><b>${g.scores[id]}</b>
+        <span>${g.control === id ? '👑 ' : ''}${esc(g.names[id])}</span><b>${num(g.scores[id])}</b>
         ${host ? `<button class="tiny" data-act="adjust" data-pid="${esc(id)}" data-d="-1" title="Take a point">−</button><button class="tiny" data-act="adjust" data-pid="${esc(id)}" data-d="1" title="Give a point">+</button>` : ''}</div>`;
     }).join('')}</div>`;
   }
@@ -1090,7 +1185,7 @@
   }
   function genCode() { let c = ''; for (let i = 0; i < 4; i++) c += CODE_CHARS[Math.floor(rng() * CODE_CHARS.length)]; return c; }
   function newRoom() {
-    return { ownerId: me.id, showHostId: me.id, showText: false, useSpecs: true, board: null, players: [{ id: me.id, name: me.name, color: me.color, connected: true }], game: null };
+    return { ownerId: me.id, showHostId: me.id, showText: false, useSpecs: true, board: null, players: [{ id: me.id, name: me.name, color: me.color, look: me.look, connected: true }], game: null };
   }
 
   function buzz() {
@@ -1105,7 +1200,9 @@
     A.audio(); // unlock audio on the first tap
     const act = b.dataset.act;
     switch (act) {
-      case 'color': me.color = b.dataset.c; local.set('color', me.color); render(); break;
+      case 'color': me.color = b.dataset.c; lookChanged(); break;
+      case 'look': { const k = b.dataset.k, n = A.LOOKS[k].length; me.look[k] = (me.look[k] + +b.dataset.d + n) % n; lookChanged(); break; }
+      case 'lookRandom': me.look = randomLook(); me.color = COLORS[Math.floor(rng() * COLORS.length)]; lookChanged(); break;
       case 'create': setName(); hostRoom(genCode(), newRoom()); break;
       case 'join': {
         setName();
@@ -1142,9 +1239,9 @@
       case 'toLobby': send({ t: 'lobby' }); break;
       case 'buzz': buzz(); break;
       case 'pick': send(b.dataset.robin != null ? { t: 'pick', robin: +b.dataset.robin } : { t: 'pick', c: +b.dataset.c, r: +b.dataset.r }); break;
-      case 'judge': send({ t: 'judge', ok: b.dataset.ok === '1' }); break;
+      case 'judge': send({ t: 'judge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
       case 'robinJudge': send({ t: 'robinJudge', ok: b.dataset.ok === '1' }); break;
-      case 'finalJudge': send({ t: 'finalJudge', ok: b.dataset.ok === '1' }); break;
+      case 'finalJudge': send({ t: 'finalJudge', ok: b.dataset.ok === '1', half: b.dataset.half === '1' }); break;
       case 'finalPick': send({ t: 'finalPick', k: +b.dataset.k }); break;
       case 'adjust': send({ t: 'adjust', pid: b.dataset.pid, d: +b.dataset.d }); break;
       case 'setControl': send({ t: 'setControl', pid: b.dataset.pid }); break;
