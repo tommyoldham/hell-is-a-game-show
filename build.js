@@ -50,16 +50,31 @@ for (const [key, rel] of Object.entries(SOUNDS)) {
   sounds[key] = 'data:audio/ogg;base64,' + buf.toString('base64');
 }
 
+// Painted art cut from Tommy's paintover and host sheet (see tools/artlab*.js).
+const ART = path.join(__dirname, 'art', 'out');
+const uri = (f, type = 'image/webp') => 'data:' + type + ';base64,' + fs.readFileSync(path.join(ART, f)).toString('base64');
+const hostMeta = JSON.parse(fs.readFileSync(path.join(ART, 'host', 'host.json'), 'utf8'));
+const art = {
+  stage: uri('stage.webp'), podium: uri('podium.webp'), podiumFrame: uri('podium-frame.webp'), logo: uri('logo.webp'),
+  host: Object.fromEntries(Object.keys(hostMeta).map(k => [k, uri('host/' + k + '.webp')])),
+  hostMeta,
+};
+const artJson = JSON.stringify(art);
+// Panel ornaments are CSS backgrounds.
+const uiCss = ':root{' + ['crest', 'banner', 'arrow'].map(k => '--ui-' + k + ':url("' + uri('ui-' + k + '.webp') + '")').join(';') + '}';
+
 // Keep inline scripts from terminating the <script> tag early.
 const js = s => s.replace(/<\/script/gi, '<\\/script');
 
 const html = read('index.html')
-  .replace('/*STYLE*/', () => read('style.css'))
+  .replace('/*STYLE*/', () => read('style.css') + '\n' + read('theme.css') + '\n' + uiCss)
   .replace('/*SOUNDS*/', () => 'window.HGS_SOUNDS = ' + JSON.stringify(sounds) + ';')
   .replace('/*QUESTIONS*/', () => js(read('questions.js')))
   .replace('/*LOGIC*/', () => js(read('logic.js')))
   .replace('/*TRIVIA*/', () => js(read('trivia.js')))
+  .replace('/*ARTASSETS*/', () => 'window.HGS_ART_ASSETS = ' + artJson + ';')
   .replace('/*ART*/', () => js(read('art.js')))
+  .replace('/*STAGE*/', () => js(read('stage.js')))
   .replace('/*APP*/', () => js(read('app.js')));
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
@@ -68,4 +83,4 @@ fs.writeFileSync(OUT, html);
 const WEB = path.join(__dirname, 'docs', 'index.html');
 fs.mkdirSync(path.dirname(WEB), { recursive: true });
 fs.writeFileSync(WEB, html);
-console.log(`Built ${OUT} (${(html.length / 1024).toFixed(0)} KB, sounds ${(soundBytes / 1024).toFixed(0)} KB)`);
+console.log(`Built ${OUT} (${(html.length / 1024).toFixed(0)} KB, sounds ${(soundBytes / 1024).toFixed(0)} KB, art ${(artJson.length / 1024).toFixed(0)} KB)`);

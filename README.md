@@ -87,8 +87,18 @@ node tools/serve.js 8777  # serve dist/ for local testing (one tab per player)
 - `src/logic.js`: the pure rules engine. `viewFor()` hides answers, wagers and final
   answers per player.
 - `src/trivia.js`: the Open Trivia Database client (rate-limit queue, token, seen list, spare pool).
-- `src/art.js`: the procedural pixel studio, demon and souls (plus unused flag/chiptune
-  helpers from the first prototype).
+- `src/art.js`: the avatar options, music loop and sound helpers. Its old pixel studio is
+  replaced by `src/stage.js`.
+- `src/stage.js`: the painted stage. It draws Tommy's paintover with the demon and podiums
+  painted out, animated torches, bulbs and embers, the demon host (20 poses from his
+  sheet, switched with `stage.pose(name, ms)`), glossy ghosts drawn in code, and podiums
+  whose screen frames are tinted to each player's colour.
+- `src/theme.css`: the painted look (stone panels, gold trim, Alegreya serif), loaded after
+  `style.css`. `docs/ART_BAR.md` scores it against the paintover.
+- `art/source/` is Tommy's paintover and host sheets; `art/out/` is what the game uses.
+  To remake `art/out/`, run `node tools/artlab.js` and open
+  `http://localhost:8790/tools/artlab.html`, where `makePlate()` and `makePodium()` in
+  `tools/artlab-plate.js` rebuild the stage and podium.
 - `src/app.js`: UI, the board editor and networking. The room owner's browser is
   authoritative over PeerJS. The host's board lives in the host's browser and is
   sent to the room owner.

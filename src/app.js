@@ -459,13 +459,13 @@
     if (p.phase !== g.phase) {
       if (g.phase === 'read' && p.phase === 'board') {
         play('question', 0.5);
-        if (g.cell && g.cell.fraud) { play('soulbet'); stage.shake(500); splash('FRAUD!', 'Something in this is a lie. Double points.', 'fraud', 1900); }
+        if (g.cell && g.cell.fraud) { play('soulbet'); stage.shake(500); stage.pose('shock', 2000); splash('FRAUD!', 'Something in this is a lie. Double points.', 'fraud', 1900); }
         else if (g.cell) { const tag = (g.board.cats[g.cell.c] || {}).tag; splash(`${g.cell.cat}`, `for ${g.cell.pts}${tag ? ' · ' + tag : ''}`, 'cat', 1300); }
       }
-      if (g.phase === 'robin') { play('question', 0.5); splash('ROUND ROBIN', g.cell && g.cell.q, 'robin', 2000); }
-      if (g.phase === 'puzzle') { play('gong'); splash('WORD PUZZLE', g.cell && g.cell.cat, 'robin', 1800); }
-      if (g.phase === 'puzzleDone') { const r = g.puzzle && g.puzzle.result; if (r && r.winner) { play('correct'); stage.burst(['#ffd84a', '#ff4b2b', '#7dff6a']); splash(`${name(r.winner)} SOLVED IT!`, `+${num(r.won)}`, 'good', 1800); } else play('wrong'); }
-      if (g.phase === 'board' && p.phase === 'guess') { play('ding'); splash(`${name(g.control)} picks first!`, g.opening.secret != null ? `The number was ${g.opening.secret}` : '', 'good', 1800); }
+      if (g.phase === 'robin') { play('question', 0.5); stage.pose('point', 1600); splash('ROUND ROBIN', g.cell && g.cell.q, 'robin', 2000); }
+      if (g.phase === 'puzzle') { play('gong'); stage.pose('fingerguns', 1800); splash('WORD PUZZLE', g.cell && g.cell.cat, 'robin', 1800); }
+      if (g.phase === 'puzzleDone') { const r = g.puzzle && g.puzzle.result; if (r && r.winner) { play('correct'); stage.pose('present', 2000); stage.burst(['#ffd84a', '#ff4b2b', '#7dff6a']); splash(`${name(r.winner)} SOLVED IT!`, `+${num(r.won)}`, 'good', 1800); } else play('wrong'); }
+      if (g.phase === 'board' && p.phase === 'guess') { play('ding'); stage.pose('present', 1800); splash(`${name(g.control)} picks first!`, g.opening.secret != null ? `The number was ${g.opening.secret}` : '', 'good', 1800); }
       if (g.phase === 'robinDone') { play('ding'); const r = g.robin && g.robin.result; if (r && r.winner) splash(`${name(r.winner)} wins it!`, `+${H.ROBIN_POINTS.winner}`, 'good'); }
       if ((g.phase === 'finalPick' || g.phase === 'wager') && p.phase === 'board') { play('gong'); stage.set({ mood: 'wide' }); stage.shake(400); splash('FINAL GAMBLE', 'Bet it all. Or don\'t. Coward.', 'fraud', 2000); }
       if (g.phase === 'finalQ') play('drumroll');
@@ -474,6 +474,7 @@
         const s = H.standings(g), top = s.filter(x => x.score === s[0].score);
         splash(top.length > 1 ? 'IT\'S A TIE!' : `${top[0].name} WINS!`, 'Everyone else: straight to Hell', 'win', 3000);
         stage.burst(S.view.players.map(pl => pl.color).concat(['#ffd84a', '#ff4b2b']));
+        stage.pose('shrug', 3000);
         if (top.some(x => x.id === me.id)) setTimeout(() => play('winner'), 900);
       }
       if (g.phase === 'board') stage.set({ mood: 'bored' });
@@ -481,14 +482,15 @@
     if (g.buzz && g.buzz !== p.buzz) {
       play('buzz');
       stage.flash('rgba(255,216,74,.3)');
+      stage.pose('point', 1200);
       splash(g.buzz === me.id ? 'YOU!' : name(g.buzz), 'buzzed in', 'buzz', 900);
       if (g.buzz === me.id) safe(() => navigator.vibrate && navigator.vibrate(120));
     }
     if (g.last && JSON.stringify(g.last) !== JSON.stringify(p.last) && g.seq !== p.seq) {
       play(g.last.ok ? 'correct' : 'wrong');
       splash(g.last.half ? 'HALF!' : g.last.ok ? 'CORRECT!' : 'WRONG!', `${name(g.last.pid)} ${pts(g.last.delta)}`, g.last.ok ? 'good' : 'bad', 1300);
-      if (!g.last.ok) { S.fallAt[g.last.pid] = stage.now(); setTimeout(() => play('trapdoor', 0.4), 200); stage.set({ mood: 'smirk' }); }
-      else stage.set({ mood: 'bored' });
+      if (!g.last.ok) { S.fallAt[g.last.pid] = stage.now(); setTimeout(() => play('trapdoor', 0.4), 200); stage.pose(Math.random() < 0.5 ? 'laugh' : 'facepalm', 1800); }
+      else stage.pose(g.last.half ? 'shrug' : Math.random() < 0.5 ? 'present' : 'wink', 1600);
     }
     // A new puzzle move: a spin (even one landing where the last did) or a letter.
     const E = g.puzzle && g.puzzle.event, PZ = p.puzzle || {};
@@ -521,11 +523,12 @@
   const lastScores = {};
   function syncPlates(entries, hostName) {
     const layer = stageNode.querySelector('.plates');
-    const xs = A.podiumXs(entries.length);
-    const gap = entries.length > 1 ? xs[1] - xs[0] : 34;
-    const pct = x => (x / A.W * 100).toFixed(2) + '%';
-    const html = (hostName ? `<div class="plate host" style="left:${pct(56)};width:${pct(76)}"><span>😈 ${esc(hostName)}</span><b>HOST</b></div>` : '') +
-      entries.map((e, k) => `<div class="plate ${e.me ? 'me' : ''} ${e.connected === false ? 'gone' : ''}" style="left:${pct(xs[k])};width:${pct(gap - 2)};--c:${e.color}">
+    const xs = A.podiumXs(entries.length), sc = A.podiumScale(entries.length);
+    const px = x => (x / A.W * 100).toFixed(2) + '%', py = y => (y / A.H * 100).toFixed(2) + '%';
+    const box = r => `left:${px(r.x0)};top:${py(r.y0)};width:${px(r.x1 - r.x0)};height:${py(r.y1 - r.y0)}`;
+    const HP = A.HOST_PLATE;
+    const html = (hostName ? `<div class="plate host" style="${box(HP)}"><span><i>😈</i> ${esc(hostName)}</span><b>HOST</b></div>` : '') +
+      entries.map((e, k) => `<div class="plate ${e.me ? 'me' : ''} ${e.connected === false ? 'gone' : ''}" style="${box(A.screenRect(xs[k], sc))};--c:${e.color};--s:${sc}">
         <span>${esc(e.name)}</span>${e.score != null ? `<b>${num(e.score)}</b>` : ''}</div>`).join('');
     if (layer.dataset.html !== html) { layer.innerHTML = html; layer.dataset.html = html; }
     // Floating "+3" / "−2" when a score changes.
@@ -538,7 +541,8 @@
       const d = e.score - before;
       const f = document.createElement('div');
       f.className = 'float ' + (d > 0 ? 'good' : 'bad');
-      f.style.left = pct(xs[k]);
+      f.style.left = px(xs[k]);
+      f.style.top = py(A.screenRect(xs[k], sc).y0 - 40 * sc);
       f.textContent = pts(d);
       floats.appendChild(f);
       setTimeout(() => f.remove(), 1600);
@@ -584,7 +588,7 @@
   // ================================================================ RENDER
   const stageNode = document.createElement('div');
   stageNode.className = 'stage';
-  stageNode.innerHTML = '<canvas></canvas><div class="plates"></div><div class="floats"></div><div class="bubble" hidden></div>';
+  stageNode.innerHTML = '<canvas></canvas><div class="plates"></div><div class="floats"></div><div class="hud"></div><div class="bubble" hidden></div>';
   const stage = A.Stage(stageNode.querySelector('canvas'));
 
   const editor = document.createElement('div');
@@ -602,6 +606,11 @@
     app.innerHTML = html;
     const ss = app.querySelector('#stageSlot');
     if (ss) ss.replaceWith(stageNode);
+    // The game's score and sound buttons live in the stage's top-right pill.
+    const hud = stageNode.querySelector('.hud'), meta = app.querySelector('.topbar .meta');
+    hud.innerHTML = '';
+    if (meta && ss) hud.appendChild(meta);
+    else if (ss) hud.innerHTML = `<div class="meta">${soundBtn()}</div>`; // covers the painted "0 pts"
     drawAvatars();
     const es = app.querySelector('#editorSlot');
     if (es) { if (!editor.firstChild) buildEditor(); es.replaceWith(editor); }
@@ -635,7 +644,7 @@
   function soundBtn() {
     return `<span class="toggles"><button class="iconbtn ${S.music ? '' : 'off'}" data-act="music" title="Music">🎵</button><button class="iconbtn" data-act="sound" title="Sound effects">${S.sound ? '🔊' : '🔇'}</button></span>`;
   }
-  function logo(small) { return `<div class="logo ${small ? 'small' : ''}"><span>HELL IS A</span><span>GAME SHOW</span></div>`; }
+  function logo(small) { return `<div class="logo ${small ? 'small' : ''}"><img src="${A.logo}" alt="Hell Is a Game Show"></div>`; }
 
   // ---------- home
   function renderHome() {
@@ -755,7 +764,7 @@
   const LOOK_LABELS = { hat: 'Hat', eyes: 'Eyes', face: 'Extra' };
   function avatarMaker() {
     return `<div class="field avatar"><span>Your soul</span>
-      <div class="avrow"><canvas class="avatar" width="18" height="25" aria-label="your soul"></canvas>
+      <div class="avrow"><canvas class="avatar" width="120" height="150" aria-label="your soul"></canvas>
         <div class="avopts">${Object.keys(A.LOOKS).map(k => `<div class="avopt">
           <button type="button" class="small" data-act="look" data-k="${k}" data-d="-1" aria-label="previous ${LOOK_LABELS[k]}">◀</button>
           <span><i>${LOOK_LABELS[k]}</i> ${esc(A.LOOKS[k][me.look[k]])}</span>
@@ -1150,7 +1159,7 @@
     const v = S.view, g = v && v.game, Z = g && g.puzzle;
     if (!Z || !Z.event || Z.event.kind !== 'spin') return;
     const w = H.WHEEL[Z.event.wedge], who = g.names[Z.event.pid] || '?';
-    if (w === 'BANKRUPT') { play('trapdoor'); setTimeout(() => play('loser'), 300); stage.shake(500); stage.set({ mood: 'smirk' }); splash('BANKRUPT!', `${who} loses their round bank`, 'bad', 1500); }
+    if (w === 'BANKRUPT') { play('trapdoor'); setTimeout(() => play('loser'), 300); stage.shake(500); stage.pose('laugh', 2000); splash('BANKRUPT!', `${who} loses their round bank`, 'bad', 1500); }
     else if (w === 'LOSE A TURN') { play('buzzer'); splash('LOSE A TURN', who, 'bad', 1200); }
     else { play('ding', 0.5); splash(`${w} ${w === 1 ? 'POINT' : 'POINTS'}`, `per letter · ${who} calls a consonant`, 'cat', 1100); }
   }

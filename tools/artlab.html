@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>artlab</title>
+<style>body{background:#333;color:#eee;font:14px sans-serif;margin:0}canvas{max-width:100%;display:block}</style>
+<body><div id="out"></div>
+<script>
+// Helpers driven from the console: load an image, edit on a canvas, save as PNG.
+window.load = src => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+window.canvasOf = (img, w = img.width, h = img.height) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0); return c; };
+window.save = (c, path) => new Promise(ok => c.toBlob(b => fetch('/save?path=' + encodeURIComponent(path), { method: 'POST', body: b }).then(r => r.text()).then(ok), 'image/png'));
+// A crop of an image with a labelled coordinate grid, for reading positions off the art.
+window.crop = (img, x, y, w, h, grid = 50) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(img, x, y, w, h, 0, 0, w, h);
+  g.strokeStyle = 'rgba(0,255,255,.35)'; g.fillStyle = '#0ff'; g.font = '12px sans-serif';
+  for (let gx = Math.ceil(x / grid) * grid; gx < x + w; gx += grid) { g.beginPath(); g.moveTo(gx - x, 0); g.lineTo(gx - x, h); g.stroke(); g.fillText(gx, gx - x + 2, 11); }
+  for (let gy = Math.ceil(y / grid) * grid; gy < y + h; gy += grid) { g.beginPath(); g.moveTo(0, gy - y); g.lineTo(w, gy - y); g.stroke(); g.fillText(gy, 2, gy - y - 2); }
+  show(c); return c; };
+window.show = c => { const o = document.getElementById('out'); o.innerHTML = ''; o.appendChild(c); };
+</script>
+<script src="artlab-plate.js"></script>

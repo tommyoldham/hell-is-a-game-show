@@ -1,0 +1,233 @@
+/* ============================================================ painted theme
+   Tommy's paintover (docs/ART_BAR.md): near-black stone panels with gold trim,
+   red-and-gold buttons, cream serif type. Loaded after style.css and overrides
+   its pixel styles. */
+:root {
+  --bg: #0b0406;
+  --panel: #170b0b;
+  --panel2: #221110;
+  --line: #5a3514;
+  --gold: #f0b54a;
+  --gold-hi: #ffe3a0;
+  --gold-lo: #8a5a1c;
+  --text: #f4e6cf;
+  --muted: #b89c86;
+  --fire: #e0321f;
+  --ink: #0b0406;
+  --px: 'Alegreya SC', Georgia, serif;
+  --serif: 'Alegreya', Georgia, serif;
+}
+#app { max-width: 1240px; }
+/* Alegreya defaults to old-style figures (a "0" at lowercase height); scores want lining ones.
+   !important because every `font:` shorthand below would reset it. */
+* { font-variant-numeric: lining-nums !important; }
+body {
+  font: 500 19px/1.35 var(--serif);
+  background: radial-gradient(ellipse 120% 60% at 50% 0%, #3d0c0e 0%, #160607 55%, var(--bg) 100%) fixed var(--bg);
+}
+h1, h2, h3 { font-family: var(--serif); font-weight: 900; line-height: 1.15; letter-spacing: .01em; }
+h1, h1.glow { font-size: clamp(30px, 5.4vw, 52px); color: #fbe7c2; text-shadow: 0 3px 0 #2a0806, 0 0 2px #000; margin: 0 0 10px; }
+h2 { font-size: 22px; color: var(--gold); font-family: var(--px); font-weight: 800; }
+h3 { font-size: 16px; color: var(--muted); font-family: var(--px); font-weight: 700; }
+.glow { color: var(--text); }
+.hot { color: #ff6a4a; }
+.fine { font-size: 16px; }
+.waiting { color: var(--gold-hi); }
+
+/* Stone panels, gold-trimmed, with a trident crest. */
+.card, .panel {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(120,40,20,.22), transparent 60%),
+    linear-gradient(180deg, #1c0e0d, #110707);
+  border: 2px solid var(--gold-lo);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255,227,160,.18), inset 0 0 0 5px #0e0606, inset 0 0 0 6px rgba(138,90,28,.6), 0 12px 30px rgba(0,0,0,.6);
+  padding: 22px 20px 18px;
+}
+/* The painted trident crest sits on the top rim; banners hang inside wide panels. */
+.panel::before {
+  content: ''; position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+  width: 150px; height: 68px; background: var(--ui-crest) center / contain no-repeat; pointer-events: none;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,.6));
+}
+.panel { margin-top: 34px; padding-top: 34px; }
+@media (min-width: 900px) {
+  .game .panel { padding-left: 96px; padding-right: 96px; }
+  .game .panel::after {
+    content: ''; position: absolute; top: 8px; left: 18px; right: 18px; height: min(170px, calc(100% - 16px)); pointer-events: none;
+    background: var(--ui-banner) left top / auto 100% no-repeat, var(--ui-banner) right top / auto 100% no-repeat;
+  }
+}
+/* Title flourishes: the paintover's red arrows either side. */
+.panel > h1 { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.panel > h1::before, .panel > h1::after { content: ''; flex: none; width: 58px; height: 24px; background: var(--ui-arrow) center / contain no-repeat; }
+.panel > h1::after { transform: scaleX(-1); }
+
+/* Buttons and inputs. */
+.big, .small {
+  font-family: var(--serif); font-weight: 800; letter-spacing: .01em;
+  color: var(--text);
+  background: linear-gradient(180deg, #2a1612, #170b09);
+  border: 2px solid var(--gold-lo); border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255,227,160,.2), 0 3px 0 #050202;
+}
+.big { font-size: 22px; padding: 12px 18px; }
+.small { font-size: 16px; padding: 6px 12px; }
+.big:not(:disabled):hover, .small:not(:disabled):hover { border-color: var(--gold); filter: brightness(1.15); }
+.fire {
+  color: #fff3dc; text-shadow: 0 2px 0 rgba(60,0,0,.7);
+  background: linear-gradient(180deg, #e2402a 0%, #b5180f 55%, #7e0d08 100%);
+  border-color: var(--gold);
+  box-shadow: inset 0 1px 0 rgba(255,220,180,.45), inset 0 0 0 1px rgba(255,200,120,.25), 0 0 0 1px #3a0806, 0 4px 0 #3a0806, 0 0 18px rgba(224,50,31,.35);
+}
+.big.good { background: linear-gradient(180deg, #3e9a2e, #1f5a17); border-color: var(--gold); }
+.big.bad { background: linear-gradient(180deg, #c32a1e, #6e0f0a); border-color: var(--gold); }
+.big.half { background: linear-gradient(180deg, #c98a28, #7a4a10); border-color: var(--gold); }
+.link { color: var(--gold); font-family: var(--serif); font-weight: 700; }
+input, select, textarea {
+  background: #0d0606; color: var(--text);
+  border: 2px solid var(--gold-lo); border-radius: 6px;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.6);
+}
+input::placeholder, textarea::placeholder { color: #7a6250; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); box-shadow: inset 0 2px 6px rgba(0,0,0,.6), 0 0 0 2px rgba(240,181,74,.25); }
+.rowform { max-width: 680px; gap: 22px; margin: 18px auto 6px; }
+.rowform input { font-size: 26px; padding: 12px 18px; }
+.rowform .big { min-width: 34%; font-size: 30px; padding: 10px 26px; }
+.panel.center > p { font-size: 20px; color: #efe0c8; }
+.joinrow input { font-family: var(--px); font-weight: 900; font-size: 24px; letter-spacing: 6px; }
+.pill { font-family: var(--px); font-weight: 800; font-size: 14px; border-radius: 999px; padding: 3px 10px; background: var(--fire); color: #fff3dc; }
+.pill.dim { background: #2a1612; color: var(--muted); }
+.money { font-family: var(--serif); font-weight: 900; font-size: 22px; color: var(--gold-hi); }
+.swatch { border-radius: 50%; border: 2px solid #0e0606; box-shadow: 0 0 0 2px var(--gold-lo); }
+.swatch.on { outline: 3px solid var(--gold); }
+.bigcode { font-family: var(--serif); font-weight: 900; color: var(--gold-hi); text-shadow: 0 3px 0 #5a1208, 0 0 24px rgba(240,181,74,.4); }
+
+/* The painted sign is the logo; on the stage screens the stage shows it. */
+.logo img { display: block; width: min(420px, 86vw); margin: 0 auto; filter: drop-shadow(0 8px 18px rgba(0,0,0,.7)); }
+.logo.small { display: none; }
+.lobby > .topbar { display: none; } /* its sound buttons live in the stage pill */
+.game > .topbar { display: none; }
+
+/* The stage: the painting at its own resolution, framed in gold. */
+.stage { border: 2px solid var(--gold-lo); border-radius: 8px; box-shadow: 0 0 0 1px #050202, 0 16px 40px rgba(0,0,0,.7), 0 0 60px rgba(224,50,31,.18); }
+.stage canvas { aspect-ratio: 1448 / 652; image-rendering: auto; }
+.hud {
+  position: absolute; left: 75.6%; top: 3.4%; width: 20%; height: 9.2%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, #2a1410, #0f0605); border: 0.14cqw solid var(--gold); border-radius: 1.4cqw;
+  box-shadow: inset 0 0 0 0.25cqw #0b0505, 0 0.4cqw 1cqw rgba(0,0,0,.6);
+}
+.hud:empty { display: none; }
+.hud .meta { gap: 1.2cqw; flex-wrap: nowrap; }
+.hud .money { font-size: 2.4cqw; }
+.hud .pill { font-size: 1.15cqw; padding: 0.2cqw 0.8cqw; }
+.hud .iconbtn { font-size: 2.1cqw; padding: 0 0.3cqw; filter: sepia(1) saturate(3) hue-rotate(-12deg) brightness(1.1); }
+.bubble {
+  left: 37%; top: 20%; max-width: 34%;
+  background: #fff3dc; color: #2a0c06; border: 0.2cqw solid #5a3514; border-radius: 1.2cqw;
+  font: italic 700 max(13px, 1.7cqw)/1.15 var(--serif); padding: 0.6cqw 1cqw;
+  box-shadow: 0 0.5cqw 1.2cqw rgba(0,0,0,.55);
+}
+.bubble::before { border-right-color: #5a3514; }
+
+/* Name plates sit inside the painted screens; no box of their own. */
+.plate {
+  transform: none; justify-content: center; gap: 0.1cqw; padding: 0 0.4cqw;
+  background: none; border: 0; box-shadow: none;
+}
+.plate::before, .plate::after { display: none; }
+.plate span { font: 800 max(7px, calc(1.75cqw * var(--s, 1)))/1.05 var(--serif); color: #fbeedd; text-shadow: 0 0.12cqw 0 #000; padding: 0; }
+.plate b { font: 900 max(9px, calc(3.4cqw * var(--s, 1)))/1 var(--serif); color: var(--gold-hi); text-shadow: 0 0 0.8cqw rgba(240,181,74,.55), 0 0.15cqw 0 #000; }
+.plate.me span { color: var(--gold-hi); }
+.plate.gone { opacity: .45; }
+.plate.host { gap: 0.2cqw; }
+.plate.host span { font-size: max(8px, 2.3cqw); }
+.plate.host span i { font-style: normal; }
+.plate.host b { font: 900 max(7px, 1.8cqw)/1 var(--px); letter-spacing: .08em; color: #ff4a32; text-shadow: 0 0 0.8cqw rgba(255,60,30,.5); }
+.float { font: 900 max(14px, 3.2cqw)/1 var(--serif); text-shadow: 0 0.2cqw 0 #000, 0 0 1cqw rgba(0,0,0,.6); transform: translate(-50%, -100%); }
+.float.good { color: #9dff7a; }
+.float.bad { color: #ff5a4a; }
+
+/* Board: lacquered red tiles with gold numbers. */
+.bhead {
+  background: linear-gradient(180deg, #2a1410, #160909); border: 2px solid var(--gold-lo); border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,227,160,.15);
+  font: 800 18px/1.05 var(--px); color: var(--text);
+}
+.bhead small { font: italic 700 14px/1 var(--serif); }
+.bhead.robin { background: linear-gradient(180deg, #4a1410, #220808); box-shadow: inset 0 0 0 1px var(--fire); }
+.bhead.puzzle { background: linear-gradient(180deg, #123048, #08141f); box-shadow: inset 0 0 0 1px #5ad1ff; }
+.bcell {
+  background: linear-gradient(180deg, #9e1d12, #5c0c08); border: 2px solid var(--gold-lo); border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255,200,160,.3), 0 3px 0 #200403;
+  font: 900 30px/1 var(--serif); color: var(--gold-hi); text-shadow: 0 2px 0 #3a0806, 0 0 12px rgba(240,181,74,.45);
+}
+.bcell:not(:disabled):hover { box-shadow: inset 0 0 0 2px var(--gold), 0 0 16px rgba(240,181,74,.4); filter: brightness(1.2); }
+.bcell.robin, .bcell.puzzle { font-size: 24px; }
+.bcell.puzzle { background: linear-gradient(180deg, #1d4f7a, #0b2238); }
+.bcell.gone { background: rgba(0,0,0,.25); border: 2px dashed rgba(138,90,28,.35); box-shadow: none; }
+.brow .bcell { font-size: 18px; }
+.qhead { font: 700 16px/1.2 var(--px); color: var(--muted); }
+.question { font: 800 clamp(24px, 3.6vw, 34px)/1.2 var(--serif); }
+.reveal { background: linear-gradient(180deg, #143a1a, #0a1f0e); border: 2px solid #3b8a35; border-radius: 6px; }
+.reveal span { font: 700 14px/1 var(--px); }
+.reveal b { font: 900 26px/1.15 var(--serif); }
+.buzzed, .result { font-family: var(--serif); font-weight: 900; }
+.buzzed { font-size: clamp(26px, 5vw, 40px); }
+.result { font-size: 22px; }
+.buzzed span { font: 600 20px/1.2 var(--serif); }
+.buzzer {
+  font: 900 clamp(30px, 8vw, 48px)/1 var(--px); letter-spacing: .06em; color: #fff3dc; text-shadow: 0 3px 0 #4a0805;
+  background: radial-gradient(circle at 36% 28%, #ff9a74, #e0321f 40%, #8e120d 75%);
+  border: 5px solid var(--gold); box-shadow: 0 10px 0 #4a0805, 0 0 0 6px #1a0707, 0 0 0 8px var(--gold-lo), 0 0 50px rgba(224,50,31,.45);
+}
+.buzzer:disabled { border-color: var(--gold-lo); }
+.banner { background: linear-gradient(180deg, #3d1010, #1d0707); border: 1px solid var(--gold-lo); border-radius: 6px; }
+.turns li, .finalans li, .standings li, .chip, .cue, .toast {
+  background: linear-gradient(180deg, #221110, #140909); border: 1px solid var(--gold-lo); border-radius: 6px;
+}
+.turns li.now, .finalans li.now, .standings li.me, .chip.me { border-color: var(--gold); box-shadow: 0 0 10px rgba(240,181,74,.3); }
+.chip b, .standings .rank { font: 900 18px/1 var(--serif); color: var(--gold-hi); }
+.chip { font-size: 18px; }
+.players i, .standings i, .chip i { border-radius: 50%; border: 1px solid #000; box-shadow: 0 0 6px var(--c); }
+.tiny { background: #1a0c0b; border: 1px solid var(--gold-lo); border-radius: 4px; }
+.hostdesk h3:first-child { color: #ff6a4a; }
+.cue { font: italic 600 18px/1.25 var(--serif); }
+
+/* Editor. */
+.etabs button { font: 700 16px/1.2 var(--serif); background: #1a0c0b; border: 1px solid var(--gold-lo); border-bottom: 0; border-radius: 6px 6px 0 0; }
+.etabs button.on { background: #3a1410; border-color: var(--gold); }
+.ebody { background: #0e0606; border: 1px solid var(--gold); border-radius: 0 6px 6px 6px; }
+.ecell > b { font: 900 22px/1 var(--serif); color: var(--gold-hi); }
+.egen { border: 1px dashed var(--gold); background: rgba(240,181,74,.05); }
+
+/* Announcements: an ornate card with a gold frame. */
+#splash .sp {
+  background: radial-gradient(ellipse at 50% 0%, #5a1a10, #1c0807 70%);
+  border: 3px solid var(--gold); border-radius: 10px; color: var(--text);
+  box-shadow: inset 0 0 0 4px #0e0606, inset 0 0 0 5px var(--gold-lo), 0 20px 60px rgba(0,0,0,.7), 0 0 40px rgba(224,50,31,.4);
+  rotate: -2deg;
+}
+#splash b { font: 900 clamp(32px, 8vw, 72px)/1.05 var(--serif); color: var(--gold-hi); text-shadow: 0 4px 0 #3a0806, 0 0 30px rgba(240,181,74,.4); }
+#splash span { font: italic 700 clamp(18px, 3vw, 28px)/1.2 var(--serif); color: var(--text); }
+#splash.good .sp { background: radial-gradient(ellipse at 50% 0%, #2f6a1f, #0c1f08 70%); }
+#splash.bad .sp { background: radial-gradient(ellipse at 50% 0%, #8e1a10, #2a0605 70%); rotate: 2deg; }
+#splash.buzz .sp { background: radial-gradient(ellipse at 50% 0%, #a3721a, #3a2205 70%); }
+#splash.buzz b { color: #fff3dc; text-shadow: 0 4px 0 #3a2205; }
+#splash.cat .sp { background: radial-gradient(ellipse at 50% 0%, #3a1410, #120606 70%); rotate: 0deg; }
+#splash.fraud .sp { background: radial-gradient(ellipse at 50% 0%, #6a0c08, #120303 70%); }
+#splash.fraud b { color: #ff5a3a; }
+#splash.win .sp { background: radial-gradient(ellipse at 50% 0%, #8a6010, #2a1803 70%); }
+
+/* Avatar preview: the painted ghost. */
+canvas.avatar { width: 96px; height: 120px; image-rendering: auto; background: radial-gradient(circle at 50% 55%, #5a1414, #140707 72%); border: 2px solid var(--gold-lo); border-radius: 8px; }
+.avopt span { font-size: 18px; }
+.key { font: 900 18px/1 var(--serif); border-radius: 4px; }
+.pzboard b { font-family: var(--serif); font-weight: 900; }
+.wheel span { font-family: var(--serif); font-weight: 900; font-size: 15px; }
+@media (max-width: 760px) {
+  .bcell { font-size: 20px; }
+  .bhead { font-size: 14px; }
+  .card, .panel { padding: 20px 14px 14px; }
+}
