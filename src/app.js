@@ -665,7 +665,7 @@
         <button class="big fire" data-act="create">🔥 Open a new show</button>
         <div class="or">or join a friend's show</div>
         <div class="joinrow">
-          <input id="code" maxlength="4" placeholder="CODE" value="${esc(S.joinCode)}" autocomplete="off" autocapitalize="characters">
+          <input id="code" maxlength="4" placeholder="CODE" value="${esc(S.typedCode || S.joinCode)}" autocomplete="off" autocapitalize="characters">
           <button class="big" data-act="join">Join</button>
         </div>
         ${canResume ? `<button class="link" data-act="resume">Reopen your show ${esc(saved.code)}</button>` : ''}
@@ -782,6 +782,10 @@
   }
   // Saved in this browser; in a room, the change shows on your podium at once.
   function lookChanged() {
+    // The re-render rebuilds the join form, so keep what's been typed in it.
+    const nameEl = app.querySelector('#name'), codeEl = app.querySelector('#code');
+    if (nameEl) { me.name = nameEl.value; local.set('name', me.name); }
+    if (codeEl && codeEl.type !== 'hidden') S.typedCode = codeEl.value.toUpperCase();
     local.set('color', me.color); local.set('look', me.look);
     if (S.screen === 'lobby') send({ t: 'setLook', look: me.look, color: me.color });
     render();
